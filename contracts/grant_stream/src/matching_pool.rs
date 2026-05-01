@@ -5,6 +5,7 @@ use soroban_sdk::{
     token, Vec, Symbol, Bytes,
 };
 use crate::storage_keys::StorageKey;
+use crate::donor_reputation::DonorReputationContract;
 
 // ── Constants ────────────────────────────────────────────────────────────
 /// Fixed-point precision: 18 decimals for quadratic funding calculations
@@ -326,7 +327,22 @@ impl MatchingPoolContract {
         // Check SEP-12 verification if required
         check_sep12_verification(&env, &donor, &pool)?;
 
-        // Transfer donation to contract
+        // Get donor reputation influence multiplier
+        let influence_multiplier = if let Ok(multiplier) = DonorReputationContract::calculate_influence(env.clone(), donor.clone()) {
+            multiplier
+        } else {
+            FIXED_POINT_SCALE // Default 1x influence if no reputation
+        };
+
+        // Apply reputation-based influence to donation amount
+        // This represents the donor's increased ability to attract matching funds
+        let influenced_amount = amount
+            .checked_mul(influence_multiplier)
+            .ok_or(MatchingError::MathOverflow)?
+            .checked_div(FIXED_POINT_SCALE)
+            .ok_or(MatchingError::MathOverflow)?;
+
+        // Transfer original donation amount to contract
         let token_client = token::Client::new(&env, &pool.token);
         token_client.transfer(
             &donor,
@@ -334,14 +350,14 @@ impl MatchingPoolContract {
             &amount,
         );
 
-        // Record donation
+        // Record donation with reputation-influenced amount for matching calculations
         let donation = Donation {
             pool_id,
             project_id,
             donor: donor.clone(),
             amount,
             donated_at: now,
-            matched_amount: 0,
+            matched_amount: 0, // Will be calculated during matching phase
         };
 
         env.storage()
@@ -369,7 +385,7 @@ impl MatchingPoolContract {
 
         contributions.total_contributions = contributions
             .total_contributions
-            .checked_add(amount)
+            .checked_add(influenced_amount)
             .ok_or(MatchingError::MathOverflow)?;
 
         if is_new_donor {
@@ -407,7 +423,7 @@ impl MatchingPoolContract {
 
         env.events().publish(
             (symbol_short!("donation"),),
-            (pool_id, project_id, donor.clone(), amount),
+            (pool_id, project_id, donor.clone(), amount, influenced_amount, influence_multiplier),
         );
 
         Ok(())

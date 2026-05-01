@@ -9,6 +9,9 @@ use soroban_sdk::{
 // PATCH: declare the new reentrancy module ───────────────────────────────────
 pub mod reentrancy;
 
+// --- Donor Reputation Module ---
+pub mod donor_reputation;
+
 // --- Constants ---
 pub const SCALING_FACTOR: i128 = 10_000_000; // 1e7
 pub const SEP38_STALENESS_SECONDS: u64 = 5 * 60;
@@ -41,6 +44,12 @@ mod test_security_council;
 
 #[cfg(test)]
 mod test_matching_pool;
+
+#[cfg(test)]
+mod test_donor_reputation;
+
+#[cfg(test)]
+mod test_reputation_matching_integration;
 
 #[cfg(test)]
 mod test_sweeper;

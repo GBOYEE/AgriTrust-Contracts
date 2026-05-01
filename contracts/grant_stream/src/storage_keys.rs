@@ -303,6 +303,25 @@ pub enum StorageKey {
     /// Health check metrics
     HealthMetrics,
     
+    // ── Donor Reputation System ─────────────────────────────────────────────────────
+    
+    /// Donor reputation data keyed by donor address
+    DonorReputation(Address),
+    /// Project success metrics for reputation calculation keyed by project ID
+    ProjectSuccessMetrics(u64),
+    /// Donor's funded projects history keyed by donor address
+    DonorFundedProjects(Address),
+    /// Project milestones completion record keyed by (project_id, milestone_index)
+    ProjectMilestoneRecord(u64, u32),
+    /// Minimum funding threshold configuration for reputation accrual
+    ReputationMinFundingThreshold,
+    /// Reputation system configuration parameters
+    ReputationConfig,
+    /// Global reputation statistics and analytics
+    ReputationStats,
+    /// Reputation update history for audit trail
+    ReputationUpdateHistory(u64),
+    
     // ── Miscellaneous & Future Extensions ───────────────────────────────────────
     
     /// Contract version information
@@ -446,6 +465,16 @@ impl Key {
             | StorageKey::DashboardConfig
             | StorageKey::HealthMetrics => "monitoring",
             
+            // Donor Reputation
+            StorageKey::DonorReputation(_)
+            | StorageKey::ProjectSuccessMetrics(_)
+            | StorageKey::DonorFundedProjects(_)
+            | StorageKey::ProjectMilestoneRecord(_, _)
+            | StorageKey::ReputationMinFundingThreshold
+            | StorageKey::ReputationConfig
+            | StorageKey::ReputationStats
+            | StorageKey::ReputationUpdateHistory(_) => "donor_reputation",
+            
             // Miscellaneous
             StorageKey::ContractVersion
             | StorageKey::FeatureFlag(_)
@@ -568,6 +597,15 @@ impl Key {
             StorageKey::LastTvl => "Last TVL snapshot",
             StorageKey::DashboardConfig => "Dashboard configuration",
             StorageKey::HealthMetrics => "Health check metrics",
+            
+            StorageKey::DonorReputation(_) => "Donor reputation score and metrics",
+            StorageKey::ProjectSuccessMetrics(_) => "Project success metrics for reputation calculation",
+            StorageKey::DonorFundedProjects(_) => "History of projects funded by donor",
+            StorageKey::ProjectMilestoneRecord(_, _) => "Milestone completion record for projects",
+            StorageKey::ReputationMinFundingThreshold => "Minimum funding threshold for reputation accrual",
+            StorageKey::ReputationConfig => "Reputation system configuration parameters",
+            StorageKey::ReputationStats => "Global reputation statistics and analytics",
+            StorageKey::ReputationUpdateHistory(_) => "Reputation update history for audit trail",
             
             StorageKey::ContractVersion => "Contract version info",
             StorageKey::FeatureFlag(_) => "Feature flag configuration",
