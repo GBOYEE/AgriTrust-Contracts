@@ -1,25 +1,3 @@
-/**
- * escrowRead.js
- * ─────────────
- * Reads escrow state from the on-chain adapter and normalises it into a
- * consistent JSON shape that the rest of the API consumes.
- *
- * Shape returned by `readEscrow`:
- * {
- *   escrow_id:   string,
- *   balance:     string,   // wei as decimal string
- *   recipient:   string,   // checksummed address
- *   status:      string,   // "active" | "released" | "disputed" | ...
- *   legal_hold:  boolean   // ← NEW: true blocks all funding actions
- * }
- *
- * Security notes:
- *  - `legal_hold` defaults to `true` (safe-fail) when the on-chain call
- *    returns an unexpected value or the field is absent.
- *  - No secrets or raw stack traces are ever logged or returned to callers.
- *  - All IDs are validated before being forwarded to the adapter.
- */
-
 "use strict";
 
 const { onChainAdapter } = require("../adapters/onChainAdapter");

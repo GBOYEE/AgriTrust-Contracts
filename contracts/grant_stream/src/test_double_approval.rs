@@ -3,7 +3,7 @@
 #[cfg(test)]
 mod tests {
     use super::*;
-    use soroban_sdk::{Address, Env, testutils::Ledger};
+    use soroban_sdk::{Address, Env, String, testutils::{Address as _, Ledger}};
     use crate::double_approval::{
         initialize_config, get_config, update_config, requires_double_approval,
         create_request, get_request, approve_request, execute_request, cancel_request,

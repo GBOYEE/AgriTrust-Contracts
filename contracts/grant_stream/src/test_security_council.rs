@@ -1,6 +1,7 @@
 #![cfg(test)]
 
 use crate::security_council::*;
+use soroban_sdk::testutils::Ledger;
 use soroban_sdk::{testutils::Address as _, Address, Env, Vec};
 
 /// Test: Initialize Security Council with 5 members

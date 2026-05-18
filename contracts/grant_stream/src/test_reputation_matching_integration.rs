@@ -8,7 +8,10 @@
 
 #![cfg(test)]
 
-use soroban_sdk::{Address, testutils::{Ledger, LedgerInfo}, BytesN};
+extern crate std;
+
+use std::println;
+use soroban_sdk::{Address, Env, vec, Vec, testutils::{Address as _, Ledger}};
 use crate::donor_reputation::*;
 use crate::matching_pool::*;
 use crate::{GrantStatus, REPUTATION_SCALE, BASIS_POINTS, DEFAULT_MIN_FUNDING_THRESHOLD, MAX_REPUTATION_MULTIPLIER, FIXED_POINT_SCALE};
@@ -51,7 +54,7 @@ fn create_donor_with_reputation(env: &Env, success_rate: i128, project_count: u3
         DonorReputationContract::record_project_funded(
             env.clone(),
             donor.clone(),
-            project_id,
+            project_id as u64,
             DEFAULT_MIN_FUNDING_THRESHOLD,
             2, // 2 milestones per project
         ).unwrap();
@@ -59,10 +62,10 @@ fn create_donor_with_reputation(env: &Env, success_rate: i128, project_count: u3
         // Complete milestones based on success rate
         let should_succeed = (i as i128) < (project_count as i128 * success_rate / BASIS_POINTS);
         if should_succeed {
-            DonorReputationContract::record_milestone_completed(env.clone(), project_id, 0, None).unwrap();
-            DonorReputationContract::record_milestone_completed(env.clone(), project_id, 1, None).unwrap();
+            DonorReputationContract::record_milestone_completed(env.clone(), project_id as u64, 0, None).unwrap();
+            DonorReputationContract::record_milestone_completed(env.clone(), project_id as u64, 1, None).unwrap();
         } else {
-            DonorReputationContract::record_project_failed(env.clone(), project_id).unwrap();
+            DonorReputationContract::record_project_failed(env.clone(), project_id as u64).unwrap();
         }
     }
 
@@ -89,10 +92,10 @@ fn test_high_reputation_donor_larger_match() {
     MatchingPoolContract::donate(env.clone(), 1, project_id, poor_donor.clone(), donation_amount).unwrap();
 
     // Fast forward to end of round
-    env.ledger().set_timestamp(env.ledger().timestamp() + 86401);
+    env.ledger().with_mut(|li| { li.timestamp = env.ledger().timestamp() + 86401; });
 
     // Calculate matching
-    let projects = vec![&env; project_id];
+    let mut projects = Vec::new(&env); projects.push_back(project_id);
     let total_matched = MatchingPoolContract::calculate_matching(env.clone(), 1, projects).unwrap();
 
     // Check project contributions to verify influence scaling
@@ -152,10 +155,10 @@ fn test_self_optimizing_matching_rounds() {
     }
 
     // Fast forward to end of round
-    env.ledger().set_timestamp(env.ledger().timestamp() + 86401);
+    env.ledger().with_mut(|li| { li.timestamp = env.ledger().timestamp() + 86401; });
 
     // Calculate matching
-    let projects = vec![&env; 1, 2];
+    let projects = vec![&env, 1u64, 2u64];
     let total_matched = MatchingPoolContract::calculate_matching(env.clone(), 1, projects).unwrap();
 
     // Check contributions for both projects
@@ -202,7 +205,7 @@ fn test_reputation_farming_structural_block() {
         ).unwrap();
 
         // Complete milestone
-        DonorReputationContract::record_milestone_completed(env.clone(), project_id, 0, None).unwrap();
+        DonorReputationContract::record_milestone_completed(env.clone(), project_id as u64, 0, None).unwrap();
     }
 
     // Farmer should have maximum reputation (100% success rate)
@@ -223,8 +226,8 @@ fn test_reputation_farming_structural_block() {
     MatchingPoolContract::donate(env.clone(), 1, 2, legitimate_donor.clone(), donation_amount).unwrap();
 
     // Fast forward and calculate matching
-    env.ledger().set_timestamp(env.ledger().timestamp() + 86401);
-    let projects = vec![&env; 1, 2];
+    env.ledger().with_mut(|li| { li.timestamp = env.ledger().timestamp() + 86401; });
+    let projects = vec![&env, 1u64, 2u64];
     MatchingPoolContract::calculate_matching(env.clone(), 1, projects).unwrap();
 
     // Both should have same influence multiplier despite different project counts
@@ -274,7 +277,7 @@ fn test_financial_barriers_to_reputation_farming() {
         assert!(result.is_ok());
         
         // Complete milestone
-        DonorReputationContract::record_milestone_completed(env.clone(), project_id, 0, None).unwrap();
+        DonorReputationContract::record_milestone_completed(env.clone(), project_id as u64, 0, None).unwrap();
     }
 
     // Poor attacker should have no reputation despite completing projects
@@ -308,8 +311,8 @@ fn test_financial_barriers_to_reputation_farming() {
     // Rich donor's donation should have maximum influence
     MatchingPoolContract::donate(env.clone(), 1, 2, rich_donor.clone(), donation_amount).unwrap();
 
-    env.ledger().set_timestamp(env.ledger().timestamp() + 86401);
-    let projects = vec![&env; 1, 2];
+    env.ledger().with_mut(|li| { li.timestamp = env.ledger().timestamp() + 86401; });
+    let projects = vec![&env, 1u64, 2u64];
     MatchingPoolContract::calculate_matching(env.clone(), 1, projects).unwrap();
 
     let poor_contrib = MatchingPoolContract::get_project_contributions(env.clone(), 1, 1).unwrap();
@@ -344,7 +347,7 @@ fn test_time_based_barriers() {
             1,
         ).unwrap();
 
-        DonorReputationContract::record_milestone_completed(env.clone(), project_id, 0, None).unwrap();
+        DonorReputationContract::record_milestone_completed(env.clone(), project_id as u64, 0, None).unwrap();
         
         // Advance time slightly between projects (but still within window)
         env.ledger().set_timestamp(start_time + (i as u64 * 3600)); // 1 hour between projects
@@ -380,8 +383,8 @@ fn test_incentive_alignment() {
     MatchingPoolContract::donate(env.clone(), 1, project_id, new_donor.clone(), donation_amount).unwrap();
 
     // Fast forward and calculate matching
-    env.ledger().set_timestamp(env.ledger().timestamp() + 86401);
-    let projects = vec![&env; project_id];
+    env.ledger().with_mut(|li| { li.timestamp = env.ledger().timestamp() + 86401; });
+    let mut projects = Vec::new(&env); projects.push_back(project_id);
     let total_matched = MatchingPoolContract::calculate_matching(env.clone(), 1, projects).unwrap();
 
     let contributions = MatchingPoolContract::get_project_contributions(env.clone(), 1, project_id).unwrap();

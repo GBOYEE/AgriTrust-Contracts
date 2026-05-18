@@ -94,6 +94,7 @@ impl TestState {
                 &FLOW_RATE,
                 &0, // no warmup
                 &None, // no validator
+                &None, // no donor
             );
             
             self.grant_ids.push_back(grant_id);
@@ -279,7 +280,7 @@ fn test_maximum_concurrent_withdrawals() {
     for (i, user) in users.iter().enumerate() {
         let grant_id = (i + 1) as u64;
         grant_token_admin.mint(&client.address, &GRANT_AMOUNT);
-        client.create_grant(&grant_id, user, &GRANT_AMOUNT, &FLOW_RATE, &0, &None);
+        client.create_grant(&grant_id, user, &GRANT_AMOUNT, &FLOW_RATE, &0, &None, &None);
     }
 
     // Advance time to allow accrual

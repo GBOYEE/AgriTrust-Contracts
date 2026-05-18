@@ -1,5 +1,3 @@
-#![no_std]
-
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, symbol_short, Address, Env,
     token, Vec, Symbol, Bytes,
@@ -134,7 +132,7 @@ fn write_pool(env: &Env, pool: &MatchingPool) {
 
 /// Computes integer square root using Newton's method
 /// Input and output are in FIXED_POINT_SCALE
-fn isqrt_fixed_point(mut n: i128) -> Result<i128, MatchingError> {
+pub fn isqrt_fixed_point(mut n: i128) -> Result<i128, MatchingError> {
     if n < 0 {
         return Err(MatchingError::MathOverflow);
     }
@@ -564,7 +562,7 @@ impl MatchingPoolContract {
             .set(&StorageKey::MatchingRound(pool_id), &round);
 
         env.events().publish(
-            (symbol_short!("match_calc"),),
+            (symbol_short!("mtch_calc"),),
             (pool_id, actual_distribution, projects.len() as u32),
         );
 
@@ -602,7 +600,7 @@ impl MatchingPoolContract {
         // Skip the DonationMatched event with donor for distribution
         // as the matched distribution goes to the project recipient
         env.events().publish(
-            (symbol_short!("match_dist"),),
+            (symbol_short!("mtch_dist"),),
             (pool_id, project_id, recipient.clone(), matched_amount),
         );
 

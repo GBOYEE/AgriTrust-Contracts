@@ -9,7 +9,10 @@
 
 #![cfg(test)]
 
-use soroban_sdk::{Address, testutils::{Ledger, LedgerInfo}, BytesN};
+extern crate std;
+
+use std::vec;
+use soroban_sdk::{Address, Env, testutils::Address as _};
 use crate::donor_reputation::*;
 use crate::{GrantStatus, REPUTATION_SCALE, BASIS_POINTS, DEFAULT_MIN_FUNDING_THRESHOLD, MAX_REPUTATION_MULTIPLIER};
 
@@ -39,7 +42,7 @@ fn create_donor_with_projects(
         DonorReputationContract::record_project_funded(
             env.clone(),
             donor.clone(),
-            project_id,
+            project_id as u64,
             DEFAULT_MIN_FUNDING_THRESHOLD,
             milestones_per_project,
         ).unwrap();
@@ -50,14 +53,14 @@ fn create_donor_with_projects(
             for milestone in 0..milestones_per_project {
                 DonorReputationContract::record_milestone_completed(
                     env.clone(),
-                    project_id,
+                    project_id as u64,
                     milestone,
                     None,
                 ).unwrap();
             }
         } else {
             // Mark project as failed
-            DonorReputationContract::record_project_failed(env.clone(), project_id).unwrap();
+            DonorReputationContract::record_project_failed(env.clone(), project_id as u64).unwrap();
         }
     }
 }
@@ -418,7 +421,7 @@ fn test_edge_cases_and_error_handling() {
 
     // Test non-existent donor reputation
     let unknown_donor = Address::generate(&env);
-    let result = DonorReputationContract::get_donor_reputation(env.clone(), unknown_donor);
+    let result = DonorReputationContract::get_donor_reputation(env.clone(), unknown_donor.clone());
     assert!(result.is_err());
 
     let result = DonorReputationContract::calculate_influence(env.clone(), unknown_donor);
@@ -439,9 +442,9 @@ fn test_multiple_donors_independence() {
     create_donor_with_projects(&env, &donor2, 3, 50, 2);  // Average
     create_donor_with_projects(&env, &donor3, 3, 0, 2);   // Poor
 
-    let rep1 = DonorReputationContract::get_donor_reputation(env.clone(), donor1).unwrap();
-    let rep2 = DonorReputationContract::get_donor_reputation(env.clone(), donor2).unwrap();
-    let rep3 = DonorReputationContract::get_donor_reputation(env.clone(), donor3).unwrap();
+    let rep1 = DonorReputationContract::get_donor_reputation(env.clone(), donor1.clone()).unwrap();
+    let rep2 = DonorReputationContract::get_donor_reputation(env.clone(), donor2.clone()).unwrap();
+    let rep3 = DonorReputationContract::get_donor_reputation(env.clone(), donor3.clone()).unwrap();
 
     // Verify independence and correct calculations
     assert_eq!(rep1.success_rate, BASIS_POINTS);

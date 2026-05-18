@@ -19,6 +19,7 @@
 
 use soroban_sdk::{contracttype, token, Address, Env};
 use crate::storage_keys::StorageKey;
+use crate::Error;
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -252,11 +253,11 @@ pub fn record_withdrawal_velocity(env: &Env, amount: i128) -> Result<bool, Error
             env.storage()
                 .instance()
                 .set(&StorageKey::SoftPa, &true);
-            return false; // velocity limit breached; SoftPause engaged
+            return Ok(false); // velocity limit breached; SoftPause engaged
         }
     }
 
-    true
+    Ok(true)
 }
 
 /// Returns `true` when the contract is in SoftPause due to a velocity breach.

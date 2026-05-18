@@ -19,6 +19,14 @@
 use soroban_sdk::{contracttype, Address, Bytes, String};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[contracttype]
+pub struct VoteKey(pub Address, pub u64);
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[contracttype]
+pub struct MilestoneKey(pub u64, pub u32);
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 #[contracttype(export = false)]
 pub enum StorageKey {
     // ── Core Contract State ──────────────────────────────────────────────────────
@@ -211,7 +219,7 @@ pub enum StorageKey {
     /// Oracle heartbeat timestamp
     OraHeart,
     /// Oracle freeze flag due to heartbeat failure
-    OraFrzHb,
+    OraFrozenDueToNoHeartbeat,
     /// Manual exchange rate override
     ManRate,
     /// Dispute window start timestamp
@@ -226,6 +234,12 @@ pub enum StorageKey {
     RentMode,
     /// Rent buffer threshold configuration
     RentThres,
+    /// Clawback checkpoint timestamp
+    ClawbackCheckpoint(u64),
+    /// Dispute escrow amount
+    DisputeEscrow(u64),
+    /// Milestone submission deposit
+    MilestoneSubmissionDeposit(u64, u32),
 
     // ── Audit & Reporting ────────────────────────────────────────────────────────
 
@@ -336,9 +350,7 @@ pub enum StorageKey {
     ProtocolPauseReason,
 }
 
-pub type StorageKey = Key;
-
-impl Key {
+impl StorageKey {
     /// Returns the namespace category for this storage key
     /// Useful for debugging and storage analysis
     pub fn namespace(&self) -> &'static str {
@@ -350,7 +362,7 @@ impl Key {
             | StorageKey::Treasury
             | StorageKey::Oracle
             | StorageKey::GrantIds
-            | StorageKey::ContractInitialized => "core",
+            | StorageKey::Init => "core",
             
             // Grant Management
             StorageKey::Grant(_)
@@ -389,10 +401,10 @@ impl Key {
             
             // Governance
             StorageKey::Proposal(_)
-            | StorageKey::Vote(_, _)
-            | StorageKey::VotingPower(_)
-            | StorageKey::ProposalIds
-            | StorageKey::GovernanceToken
+            |             StorageKey::Vote(_)
+            | StorageKey::VotePow(_)
+            | StorageKey::PropIds
+            | StorageKey::GovTok
             | StorageKey::VotingThreshold
             | StorageKey::QuorumThreshold
             | StorageKey::CouncilMembers
@@ -433,7 +445,7 @@ impl Key {
             | StorageKey::Sep38Rate(_, _) => "audit",
             
             // Multi-Token
-            StorageKey::WrappedAsset(_)
+            StorageKey::WrapAst(_)
             | StorageKey::BridgeConfig
             | StorageKey::CrossChainTx(_)
             | StorageKey::TokenPriceFeed(_) => "multi_token",
@@ -480,7 +492,8 @@ impl Key {
             | StorageKey::FeatureFlag(_)
             | StorageKey::TemporaryData(_)
             | StorageKey::MigrationStatus
-            | StorageKey::ProtocolPauseReason => "misc",
+            |             StorageKey::ProtocolPauseReason => "misc",
+            _ => "other",
         }
     }
 
@@ -494,7 +507,7 @@ impl Key {
             StorageKey::Treasury => "Treasury address for fund management",
             StorageKey::Oracle => "Oracle address for price feeds",
             StorageKey::GrantIds => "Global list of all grant IDs",
-            StorageKey::ContractInitialized => "Contract initialization status",
+            StorageKey::Init => "Contract initialization status",
             
             StorageKey::Grant(_) => "Individual grant data and metadata",
             StorageKey::Tombstone(_) => "Cryptographic proof of a pruned grant",
@@ -529,10 +542,10 @@ impl Key {
             StorageKey::Metrics => "Yield treasury generic metrics",
             
             StorageKey::Proposal(_) => "Governance proposal data",
-            StorageKey::Vote(_, _) => "Individual vote records",
-            StorageKey::VotingPower(_) => "Voting power allocation",
-            StorageKey::ProposalIds => "List of all proposal IDs",
-            StorageKey::GovernanceToken => "Token used for governance",
+            StorageKey::Vote(_) => "Individual vote records",
+            StorageKey::VotePow(_) => "Voting power allocation",
+            StorageKey::PropIds => "List of all proposal IDs",
+            StorageKey::GovTok => "Token used for governance",
             StorageKey::VotingThreshold => "Voting threshold configuration",
             StorageKey::QuorumThreshold => "Quorum requirements",
             StorageKey::CouncilMembers => "Council membership list",
@@ -570,7 +583,7 @@ impl Key {
             StorageKey::Sep38DefaultFiat => "Default SEP-38 fiat quote asset",
             StorageKey::Sep38Rate(_, _) => "SEP-38 grant-token fiat rate",
             
-            StorageKey::WrappedAsset(_) => "Wrapped asset data",
+            StorageKey::WrapAst(_) => "Wrapped asset data",
             StorageKey::BridgeConfig => "Multi-token bridge config",
             StorageKey::CrossChainTx(_) => "Cross-chain transaction",
             StorageKey::TokenPriceFeed(_) => "Token price feed data",
@@ -612,6 +625,7 @@ impl Key {
             StorageKey::TemporaryData(_) => "Temporary storage data",
             StorageKey::MigrationStatus => "Contract migration status",
             StorageKey::ProtocolPauseReason => "Protocol-wide emergency pause reason",
+            _ => "Other storage key",
         }
     }
 }
@@ -634,7 +648,7 @@ mod tests {
         assert_eq!(StorageKey::Proposal(456).namespace(), "governance");
         assert_eq!(StorageKey::OracleFrozen.namespace(), "circuit_breaker");
         assert_eq!(StorageKey::AuditTxCounter.namespace(), "audit");
-        assert_eq!(StorageKey::WrappedAsset(address()).namespace(), "multi_token");
+        assert_eq!(StorageKey::WrapAst(address()).namespace(), "multi_token");
         assert_eq!(StorageKey::EmergencySigners.namespace(), "emergency");
         assert_eq!(StorageKey::ReentrancyGuard.namespace(), "security");
         assert_eq!(StorageKey::LastHeartbeat.namespace(), "monitoring");

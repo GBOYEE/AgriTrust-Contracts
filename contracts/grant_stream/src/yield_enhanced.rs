@@ -1,7 +1,7 @@
 #![no_std]
 
 use soroban_sdk::{
-    contract, contracterror, contractimpl, contracttype, symbol_short, Address, Env, 
+    contracterror, contracttype, symbol_short, Address, Env, 
     token, Token, Vec, Map, TryIntoVal, TryFromVal,
 };
 
@@ -17,7 +17,6 @@ use super::yield_treasury::{
     YieldError, DataKey as YieldDataKey,
 };
 
-#[contract]
 pub struct YieldEnhancedGrantContract;
 
 // Enhanced data keys for combined functionality
@@ -168,7 +167,6 @@ fn read_yield_token_internal(env: &Env) -> Result<Token, EnhancedError> {
     Ok(token::Client::new(env, &token_address))
 }
 
-#[contractimpl]
 impl YieldEnhancedGrantContract {
     /// Initialize the enhanced grant contract with yield functionality
     pub fn initialize(

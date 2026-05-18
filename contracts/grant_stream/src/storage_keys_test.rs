@@ -138,7 +138,7 @@ mod tests {
             StorageKey::AuditTxCounter,
             StorageKey::ClaimValue(1, 1),
             StorageKey::Sep38DefaultFiat,
-            StorageKey::WrappedAsset(Address::random()),
+            StorageKey::WrapAst(Address::random()),
             StorageKey::EmergencySigners,
             StorageKey::ReentrancyGuard,
             StorageKey::LastHeartbeat,

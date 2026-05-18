@@ -14,7 +14,7 @@
 #![no_std]
 
 use soroban_sdk::{
-    contract, contracterror, contractimpl, contracttype, symbol_short, Address, Env,
+    contracterror, contracttype, symbol_short, Address, Env,
     Vec, Symbol, String, Map, xdr::ToXdr,
 };
 use crate::storage_keys::StorageKey;
@@ -292,10 +292,8 @@ fn calculate_influence_multiplier(reputation_score: i128, config: &ReputationCon
 
 // ── Contract Implementation ──────────────────────────────────────────────
 
-#[contract]
 pub struct DonorReputationContract;
 
-#[contractimpl]
 impl DonorReputationContract {
     /// Initialize the reputation system with default configuration
     pub fn initialize(env: Env, admin: Address) -> Result<(), ReputationError> {
@@ -371,7 +369,7 @@ impl DonorReputationContract {
         write_reputation_config(&env, &config);
 
         env.events().publish(
-            (symbol_short!("rep_config"),),
+            (symbol_short!("rep_cfg"),),
             (
                 config.min_funding_threshold,
                 config.max_multiplier,
@@ -428,7 +426,7 @@ impl DonorReputationContract {
         }
 
         env.events().publish(
-            (symbol_short!("proj_funded"),),
+            (symbol_short!("proj_fnd"),),
             (donor.clone(), project_id, funded_amount, total_milestones),
         );
 
@@ -489,7 +487,7 @@ impl DonorReputationContract {
         // Emit ReputationUpdated event
         if let Ok(reputation) = read_donor_reputation(&env, &updated_metrics.donor) {
             env.events().publish(
-                (symbol_short!("rep_updated"),),
+                (symbol_short!("rep_upd"),),
                 (
                     updated_metrics.donor.clone(),
                     reputation.reputation_score,
@@ -500,7 +498,7 @@ impl DonorReputationContract {
         }
 
         env.events().publish(
-            (symbol_short!("milestone_comp"),),
+            (symbol_short!("ms_comp"),),
             (project_id, milestone_index, updated_metrics.completed_milestones),
         );
 
@@ -532,7 +530,7 @@ impl DonorReputationContract {
         )?;
 
         env.events().publish(
-            (symbol_short!("proj_failed"),),
+            (symbol_short!("proj_fld"),),
             (project_id, metrics.donor.clone()),
         );
 

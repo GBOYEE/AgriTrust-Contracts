@@ -6,10 +6,11 @@ use soroban_sdk::{
 };
 
 use super::optimized::{
-    Grant, Error, DataKey,
+    Grant, GrantContract, DataKey,
     STATUS_ACTIVE, STATUS_PAUSED, STATUS_COMPLETED,
     has_status, set_status, clear_status, read_admin, require_admin_auth,
 };
+use super::Error;
 
 fn emit_multi_token_snapshot(env: &Env, grant_id: u64, grant: &MultiTokenGrant) {
     env.events().publish(

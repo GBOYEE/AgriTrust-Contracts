@@ -310,7 +310,7 @@ pub fn execute_rescue(env: &Env, caller: Address, proposal_id: u64) -> Result<(A
         (proposal_id, proposal.kind, proposal.rescue_to.clone(), proposal.amount),
     );
 
-    (proposal.rescue_to, proposal.amount)
+    Ok((proposal.rescue_to, proposal.amount))
 }
 
 /// Cancel a pending proposal.  Only the original proposer may cancel.

@@ -1,6 +1,7 @@
 #![cfg(test)]
 
-use soroban_sdk::{Address, Env, Vec, testutils::Address as _};
+use std::println;
+use soroban_sdk::{Address, Env, Vec, testutils::{Address as _, Ledger}};
 use crate::matching_pool::{
     MatchingPoolContract, MatchingPoolContractClient, FIXED_POINT_SCALE, isqrt_fixed_point,
 };
@@ -24,7 +25,7 @@ fn test_matching_pool_full_cycle_10_projects_100_donors() {
     let max_donation_per_donor = 100_000_000i128;
 
     // Initialize pool with SEP-12 requirement
-    let result = client.initialize_pool(
+    client.initialize_pool(
         &pool_id,
         &admin,
         &token,
@@ -35,10 +36,8 @@ fn test_matching_pool_full_cycle_10_projects_100_donors() {
         &max_donation_per_donor,
     );
 
-    assert!(result.is_ok());
-
     // Verify pool was created
-    let pool = client.get_pool(&pool_id).unwrap();
+    let pool = client.get_pool(&pool_id);
     assert_eq!(pool.pool_id, pool_id);
     assert_eq!(pool.total_match_amount, total_match_amount);
     assert_eq!(pool.requires_sep12, true);
@@ -47,8 +46,7 @@ fn test_matching_pool_full_cycle_10_projects_100_donors() {
     // Verify SEP-12 donors
     for d in 0..num_donors {
         let donor = Address::generate(&env);
-        let result = client.verify_sep12_identity(&admin, &donor);
-        assert!(result.is_ok());
+        client.verify_sep12_identity(&admin, &donor);
         assert_eq!(client.is_sep12_verified(&donor), true);
     }
 
@@ -72,8 +70,7 @@ fn test_matching_pool_full_cycle_10_projects_100_donors() {
             let base_amount = min_donation + (donor_idx as i128 * 1_000_000i128) % (max_donation_per_donor - min_donation);
             let amount = base_amount.min(max_donation_per_donor);
 
-            let result = client.donate(&pool_id, &project_id, &donor, &amount);
-            assert!(result.is_ok(), "Donation failed for donor {} to project {}", donor_idx, project_id);
+            client.donate(&pool_id, &project_id, &donor, &amount);
 
             total_donated = total_donated.checked_add(amount).unwrap();
         }
@@ -85,8 +82,7 @@ fn test_matching_pool_full_cycle_10_projects_100_donors() {
     // Query contributions for each project
     for project_id in 1..=num_projects {
         let contrib = client
-            .get_project_contributions(&pool_id, &(project_id as u64))
-            .unwrap();
+            .get_project_contributions(&pool_id, &(project_id as u64));
 
         assert!(contrib.total_contributions > 0, "Project {} should have contributions", project_id);
         assert!(contrib.unique_donors > 0, "Project {} should have unique donors", project_id);
@@ -110,7 +106,7 @@ fn test_matching_pool_full_cycle_10_projects_100_donors() {
         project_ids.push_back(proj_id as u64);
     }
 
-    let matched_total = client.calculate_matching(&pool_id, &project_ids).unwrap();
+    let matched_total = client.calculate_matching(&pool_id, &project_ids);
 
     println!("Total matched amount: {}", matched_total);
     assert!(matched_total > 0, "Total matched should be greater than zero");
@@ -122,8 +118,7 @@ fn test_matching_pool_full_cycle_10_projects_100_donors() {
     // Verify each project has matched amount
     for project_id in 1..=num_projects {
         let matched = client
-            .get_project_matched(&pool_id, &(project_id as u64))
-            .unwrap();
+            .get_project_matched(&pool_id, &(project_id as u64));
 
         assert!(matched >= 0, "Project {} matched amount should be non-negative", project_id);
 
@@ -133,7 +128,7 @@ fn test_matching_pool_full_cycle_10_projects_100_donors() {
     }
 
     // Verify matching round is finalized
-    let round = client.get_matching_round(&pool_id).unwrap();
+    let round = client.get_matching_round(&pool_id);
     assert_eq!(round.is_finalized, true);
     assert_eq!(round.pool_id, pool_id);
     assert_eq!(round.project_count, num_projects as u32);
@@ -170,15 +165,13 @@ fn test_quadratic_funding_incentives() {
             &false, // No SEP-12 for this test
             &min_donation,
             &max_donation_per_donor,
-        )
-        .unwrap();
+        );
 
     // Scenario 1: Centralized donations (10 donors, each gives 10M to one project)
     for donor_idx in 0..10u32 {
         let donor = Address::generate(&env);
         client
-            .donate(&pool_id, &1u64, &donor, &10_000_000i128)
-            .unwrap();
+            .donate(&pool_id, &1u64, &donor, &10_000_000i128);
     }
 
     // Scenario 2: Distributed donations (50 donors, each gives 2M to one different project)
@@ -186,8 +179,7 @@ fn test_quadratic_funding_incentives() {
         let donor = Address::generate(&env);
         let project_id = 2 + (donor_idx % 8); // Projects 2-9
         client
-            .donate(&pool_id, &(project_id as u64), &donor, &2_000_000i128)
-            .unwrap();
+            .donate(&pool_id, &(project_id as u64), &donor, &2_000_000i128);
     }
 
     // Fast forward time
@@ -200,13 +192,12 @@ fn test_quadratic_funding_incentives() {
     for i in 1..=9u64 {
         projects.push_back(i);
     }
-    client.calculate_matching(&pool_id, &projects).unwrap();
+    client.calculate_matching(&pool_id, &projects);
 
     // Verify: distributed projects should get MORE matching per dollar raised
     let centralized_contrib = client
-        .get_project_contributions(&pool_id, &1u64)
-        .unwrap();
-    let centralized_matched = client.get_project_matched(&pool_id, &1u64).unwrap();
+        .get_project_contributions(&pool_id, &1u64);
+    let centralized_matched = client.get_project_matched(&pool_id, &1u64);
     let centralized_match_ratio = if centralized_contrib.total_contributions > 0 {
         centralized_matched as f64 / centralized_contrib.total_contributions as f64
     } else {
@@ -214,9 +205,8 @@ fn test_quadratic_funding_incentives() {
     };
 
     let distributed_contrib = client
-        .get_project_contributions(&pool_id, &2u64)
-        .unwrap();
-    let distributed_matched = client.get_project_matched(&pool_id, &2u64).unwrap();
+        .get_project_contributions(&pool_id, &2u64);
+    let distributed_matched = client.get_project_matched(&pool_id, &2u64);
     let distributed_match_ratio = if distributed_contrib.total_contributions > 0 {
         distributed_matched as f64 / distributed_contrib.total_contributions as f64
     } else {
@@ -259,27 +249,28 @@ fn test_sep12_verification_prevents_unverified_donations() {
             &true, // SEP-12 REQUIRED
             &1_000_000i128,
             &100_000_000i128,
-        )
-        .unwrap();
+        );
 
     let unverified_donor = Address::generate(&env);
     let verified_donor = Address::generate(&env);
 
     // Verify the verified donor
-    client.verify_sep12_identity(&admin, &verified_donor).unwrap();
+    client.verify_sep12_identity(&admin, &verified_donor);
     assert_eq!(client.is_sep12_verified(&verified_donor), true);
     assert_eq!(client.is_sep12_verified(&unverified_donor), false);
 
     // Try donation with unverified donor - should fail
-    let result = client.donate(&pool_id, &1u64, &unverified_donor, &10_000_000i128);
+    client.donate(&pool_id, &1u64, &unverified_donor, &10_000_000i128);
+    #[allow(unused_must_use)] {
+    let result = client.try_donate(&pool_id, &1u64, &unverified_donor, &10_000_000i128);
     assert!(
         result.is_err(),
         "Unverified donor should not be able to donate when SEP-12 is required"
     );
+}
 
     // Verified donor should succeed
-    let result = client.donate(&pool_id, &1u64, &verified_donor, &10_000_000i128);
-    assert!(result.is_ok(), "Verified donor should be able to donate");
+    client.donate(&pool_id, &1u64, &verified_donor, &10_000_000i128);
 }
 
 #[test]
@@ -339,8 +330,7 @@ fn test_incentive_mathematica_invariant() {
             &false,
             &1_000_000i128,
             &100_000_000i128,
-        )
-        .unwrap();
+        );
 
     // Create two projects:
     // Project A: 5 donors × 100M = 500M (concentrated)
@@ -349,15 +339,13 @@ fn test_incentive_mathematica_invariant() {
     for i in 0..5 {
         let donor = Address::generate(&env);
         client
-            .donate(&pool_id, &1u64, &donor, &100_000_000i128)
-            .unwrap();
+            .donate(&pool_id, &1u64, &donor, &100_000_000i128);
     }
 
     for i in 0..50 {
         let donor = Address::generate(&env);
         client
-            .donate(&pool_id, &2u64, &donor, &10_000_000i128)
-            .unwrap();
+            .donate(&pool_id, &2u64, &donor, &10_000_000i128);
     }
 
     // Advance time
@@ -368,17 +356,15 @@ fn test_incentive_mathematica_invariant() {
     let mut projects = Vec::new(&env);
     projects.push_back(1u64);
     projects.push_back(2u64);
-    client.calculate_matching(&pool_id, &projects).unwrap();
+    client.calculate_matching(&pool_id, &projects);
 
     let proj_a_contrib = client
-        .get_project_contributions(&pool_id, &1u64)
-        .unwrap();
-    let proj_a_matched = client.get_project_matched(&pool_id, &1u64).unwrap();
+        .get_project_contributions(&pool_id, &1u64);
+    let proj_a_matched = client.get_project_matched(&pool_id, &1u64);
 
     let proj_b_contrib = client
-        .get_project_contributions(&pool_id, &2u64)
-        .unwrap();
-    let proj_b_matched = client.get_project_matched(&pool_id, &2u64).unwrap();
+        .get_project_contributions(&pool_id, &2u64);
+    let proj_b_matched = client.get_project_matched(&pool_id, &2u64);
 
     println!(
         "Project A (concentrated): {} raised, {} matched, {} donors",

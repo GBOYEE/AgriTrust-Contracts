@@ -24,6 +24,14 @@ const RATE_INCREASE_TIMELOCK_SECS: u64 = 48 * 60 * 60;
 const INACTIVITY_THRESHOLD_SECS: u64 = 90 * 24 * 60 * 60;
 const PRUNE_DELAY_SECONDS: u64 = 180 * 24 * 60 * 60;
 
+// Re-export constants for tests
+#[cfg(test)]
+pub use donor_reputation::{
+    REPUTATION_SCALE, BASIS_POINTS, DEFAULT_MIN_FUNDING_THRESHOLD, MAX_REPUTATION_MULTIPLIER,
+};
+#[cfg(test)]
+pub use matching_pool::FIXED_POINT_SCALE;
+
 // --- Submodules ---
 pub mod storage_keys;
 pub mod multi_token;
@@ -36,6 +44,7 @@ pub mod tax_reporting;
 pub mod audit_log;
 pub mod multi_threshold;
 pub mod security_council;
+pub mod matching_pool;
 
 #[cfg(all(test, feature = "legacy-tests"))]
 mod test_dispute_circuit_breaker;
@@ -205,9 +214,41 @@ pub enum GrantStreamError {
     RentPreservationMode = 21,
     InvalidTimestamp = 22,
     InvalidRecipient = 30,
+    InvalidZKProof = 31,
+    WithdrawalBelowMinimum = 32,
+    ClawbackAlreadyExecuted = 33,
+    InvalidClawbackReason = 34,
+    NotDonorOrMultiSig = 35,
+    DisputeEscrowNotFound = 36,
+    InvalidNonce = 37,
+    SubmissionDepositNotFound = 38,
+    NotRegisteredSigner = 39,
+    ProposalNotFound = 40,
+    ProposalNotPending = 41,
+    InsufficientApprovals = 42,
+    NotSanityOracle = 43,
 }
 
 pub type Error = GrantStreamError;
+
+impl From<optimized::Error> for GrantStreamError {
+    fn from(e: optimized::Error) -> Self {
+        match e {
+            optimized::Error::NotInitialized => GrantStreamError::NotInitialized,
+            optimized::Error::AlreadyInitialized => GrantStreamError::AlreadyInitialized,
+            optimized::Error::NotAuthorized => GrantStreamError::NotAuthorized,
+            optimized::Error::GrantNotFound => GrantStreamError::GrantNotFound,
+            optimized::Error::GrantAlreadyExists => GrantStreamError::GrantAlreadyExists,
+            optimized::Error::InvalidRate => GrantStreamError::InvalidRate,
+            optimized::Error::InvalidAmount => GrantStreamError::InvalidAmount,
+            optimized::Error::InvalidState => GrantStreamError::InvalidState,
+            optimized::Error::MathOverflow => GrantStreamError::MathOverflow,
+            optimized::Error::SoftPaused => GrantStreamError::SoftPaused,
+            optimized::Error::OracleFrozen => GrantStreamError::OracleFrozen,
+            _ => GrantStreamError::NotAuthorized,
+        }
+    }
+}
 
 // --- Internal Helpers ---
 
@@ -364,6 +405,20 @@ fn write_expected_milestone_nonce(env: &Env, grant_id: u64, next_nonce: u64) {
     env.storage()
         .instance()
         .set(&DataKey::MilestoneSubmitNonce(grant_id), &next_nonce);
+}
+
+const MILESTONE_SUBMISSION_DEPOSIT_XLM: i128 = 5_0000000;
+
+fn set_milestone_submission_deposit(env: &Env, grant_id: u64, milestone_index: u32, amount: i128) {
+    env.storage()
+        .instance()
+        .set(&DataKey::MilestoneSubmissionDeposit(grant_id, milestone_index), &amount);
+}
+
+fn get_milestone_submission_deposit(env: &Env, grant_id: u64, milestone_index: u32) -> Option<i128> {
+    env.storage()
+        .instance()
+        .get(&DataKey::MilestoneSubmissionDeposit(grant_id, milestone_index))
 }
 
 fn read_confidential_commitment(env: &Env, grant_id: u64) -> Result<i128, Error> {
@@ -630,7 +685,7 @@ fn settle_grant(grant: &mut Grant, now: u64) -> Result<(), Error> {
  
             // ── Milestone validation ──────────────────────────────────────
             // (existing logic unchanged)
-            let milestone_key = StorageKey::Milestone(MilestoneKey(grant_id, milestone_index));
+            let milestone_key = StorageKey::Milestone(grant_id, milestone_index);
             let milestone_proof: Symbol = env
                 .storage()
                 .persistent()
@@ -843,6 +898,7 @@ impl GrantStreamContract {
         }
 
         let now = env.ledger().timestamp();
+        let grant_token = read_grant_token(&env)?;
         let grant = Grant {
             recipient: recipient.clone(),
             total_amount,
@@ -870,6 +926,8 @@ impl GrantStreamContract {
             clawback_eligible: 0,
             donor: donor.clone(),
             clawback_checkpoint: None,
+            token: grant_token.clone(),
+            streamed_amount: 0,
         };
 
         env.storage().instance().set(&key, &grant);
@@ -884,7 +942,6 @@ impl GrantStreamContract {
         env.storage().instance().set(&recipient_key, &user_grants);
 
         let admin = read_admin(&env)?;
-        let grant_token = read_grant_token(&env)?;
         env.events().publish(
             (symbol_short!("strm_cre"), recipient, admin, grant_token, grant_id),
             total_amount,
@@ -1299,8 +1356,8 @@ impl GrantStreamContract {
         // Update storage mappings: remove from old grantee's grants
         let old_recipient_key = StorageKey::RecipientGrants(old_grantee.clone());
         let mut old_user_grants: Vec<u64> = env.storage().instance().get(&old_recipient_key).unwrap_or(vec![&env]);
-        if let Some(pos) = old_user_grants.iter().position(|&id| id == grant_id) {
-            old_user_grants.remove(pos);
+        if let Some(pos) = old_user_grants.iter().position(|id| id == grant_id) {
+            old_user_grants.remove(pos as u32);
             env.storage().instance().set(&old_recipient_key, &old_user_grants);
         }
         
@@ -1314,7 +1371,7 @@ impl GrantStreamContract {
         let admin = read_admin(&env)?;
         let grant_token = read_grant_token(&env)?;
         env.events().publish(
-            (symbol_short!("grantee_chg"), old_grantee, new_grantee, admin, grant_token, grant_id),
+            (symbol_short!("grnt_chg"), old_grantee, new_grantee, admin, grant_token, grant_id),
             grant.total_amount,
         );
         
@@ -1465,7 +1522,7 @@ impl GrantStreamContract {
         // Emit resolution event
         let admin = read_admin(&env)?;
         env.events().publish(
-            (symbol_short!("claw_resolve"), grant_id, admin),
+            (symbol_short!("claw_rslv"), grant_id, admin),
             (escrow_amount, release_to_donor),
         );
         
@@ -1975,7 +2032,7 @@ impl GrantStreamContract {
     }
 
     /// Admin-only: slash a fraudulent milestone submission deposit to treasury.
-    pub fn slash_milestone_submission_deposit(
+    pub fn slash_ms_submission_deposit(
         env: Env,
         grant_id: u64,
         milestone_index: u32,
@@ -2239,7 +2296,7 @@ impl GrantStreamContract {
         // ── 2. Create Audit Tombstone ──────────────────────────────────────────
         
         // Hash the current grant state to preserve proof of existence
-        let tombstone_hash = env.crypto().sha256(&grant.to_xdr(&env));
+        let tombstone_hash = env.crypto().sha256(&grant.clone().to_xdr(&env));
         env.storage().persistent().set(&StorageKey::Tombstone(grant_id), &tombstone_hash);
 
         // ── 3. State Cleanup ───────────────────────────────────────────────────
@@ -2298,7 +2355,7 @@ impl GrantStreamContract {
         
         env.events().publish(
             (symbol_short!("prune"), grant_id, relayer),
-            (tombstone_hash, bounty_amount),
+            (tombstone_hash.to_bytes(), bounty_amount),
         );
 
         Ok(())
@@ -2427,7 +2484,7 @@ impl GrantStreamContract {
     }
 
     /// Execute council rotation after 7-day DAO-approved timelock.
-    pub fn execute_council_rotation(env: Env) -> Result<(), Error> {
+    pub fn exec_council_rotation(env: Env) -> Result<(), Error> {
         require_admin_auth(&env)?;
         security_council::SecurityCouncil::execute_council_rotation(env)
             .map_err(|_| Error::NotAuthorized)
@@ -2487,7 +2544,7 @@ impl GrantStreamContract {
         .map_err(|_| Error::NotAuthorized)?;
 
         env.events().publish(
-            (symbol_short!("clawback_pending"), initiator, grant_id),
+            (symbol_short!("claw_pend"), initiator, grant_id),
             action_id,
         );
 

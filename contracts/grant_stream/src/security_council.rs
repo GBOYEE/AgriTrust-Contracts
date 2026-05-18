@@ -1,4 +1,4 @@
-use soroban_sdk::{contract, contractimpl, contracttype, Address, Env, Vec, Symbol, symbol_short, Map};
+use soroban_sdk::{contracterror, contracttype, Address, Env, Vec, Symbol, symbol_short, Map};
 
 /// Security Council module implementing 3-of-5 multi-sig veto authority
 /// over DAO-triggered governance actions with 48-hour timelock.
@@ -66,6 +66,7 @@ pub enum StorageKey {
     ActionIds,
 }
 
+#[contracterror]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u32)]
 pub enum SecurityCouncilError {
@@ -160,7 +161,6 @@ fn count_veto_signatures(env: &Env, action_id: u64) -> u32 {
 
 // --- Public Interface ---
 
-#[contractimpl]
 impl SecurityCouncil {
     /// Initialize the Security Council with 5 members
     pub fn initialize_council(env: Env, members: Vec<Address>) -> Result<(), SecurityCouncilError> {
@@ -178,7 +178,7 @@ impl SecurityCouncil {
         env.storage().instance().set(&StorageKey::ActionIds, &Vec::<u64>::new(&env));
 
         env.events().publish(
-            (symbol_short!("council_init"),),
+            (symbol_short!("cncl_init"),),
             members.len(),
         );
 
@@ -221,7 +221,7 @@ impl SecurityCouncil {
         env.storage().instance().set(&StorageKey::ActionIds, &action_ids);
 
         env.events().publish(
-            (symbol_short!("action_pend"), action_type, initiator),
+            (symbol_short!("act_pend"), action_type, initiator),
             (action_id, now + TIMELOCK_DURATION_SECS),
         );
 
@@ -264,7 +264,7 @@ impl SecurityCouncil {
             write_pending_action(&env, &action);
 
             env.events().publish(
-                (symbol_short!("action_veto"), action.action_type, action.initiator),
+                (symbol_short!("act_veto"), action.action_type, action.initiator),
                 (action_id, signature_count),
             );
         }
@@ -296,7 +296,7 @@ impl SecurityCouncil {
         write_pending_action(&env, &action);
 
         env.events().publish(
-            (symbol_short!("action_exec"), action.action_type, action.initiator),
+            (symbol_short!("act_exec"), action.action_type, action.initiator),
             action_id,
         );
 
@@ -335,7 +335,7 @@ impl SecurityCouncil {
         env.storage().instance().set(&StorageKey::PendingRotation, &rotation);
 
         env.events().publish(
-            (symbol_short!("rotate_prop"), dao_admin),
+            (symbol_short!("rot_prop"), dao_admin),
             now + KEY_ROTATION_TIMELOCK_SECS,
         );
 
@@ -376,7 +376,7 @@ impl SecurityCouncil {
             .set(&StorageKey::PendingRotation, &executed_rotation);
 
         env.events().publish(
-            (symbol_short!("rotate_exec"),),
+            (symbol_short!("rot_exec"),),
             now,
         );
 

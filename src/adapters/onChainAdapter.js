@@ -1,37 +1,42 @@
-/**
- * onChainAdapter.js
- * ─────────────────
- * Thin abstraction over the on-chain data source.
- *
- * In production this would call an RPC node / indexer / subgraph.
- * The interface is kept minimal so it can be easily mocked in tests.
- *
- * Methods:
- *   getEscrow(escrowId)  → raw escrow object  (or null if not found)
- *   getLegalHold(escrowId) → boolean
- */
-
 "use strict";
 
+const { SorobanRpc, Contract, xdr } = require("@stellar/stellar-sdk");
+
+const RPC_URL = process.env.STELLAR_RPC_URL || "https://rpc.mainnet.stellar.org";
+const CONTRACT_ID = process.env.GRANT_STREAM_CONTRACT_ID;
+
+let server;
+let contract;
+
+function getServer() {
+  if (!server) server = new SorobanRpc.Server(RPC_URL);
+  return server;
+}
+
+function getContract() {
+  if (!contract && CONTRACT_ID) contract = new Contract(CONTRACT_ID);
+  return contract;
+}
+
 const onChainAdapter = {
-  /**
-   * Fetch raw escrow data from the on-chain source.
-   * @param {string} escrowId
-   * @returns {Promise<object|null>}
-   */
-  async getEscrow(escrowId) { // eslint-disable-line no-unused-vars
-    // TODO: replace with actual RPC / subgraph call
-    throw new Error("onChainAdapter.getEscrow not implemented");
+  async getEscrow(escrowId) {
+    if (!CONTRACT_ID) throw new Error("GRANT_STREAM_CONTRACT_ID not set");
+    const result = await getServer().simulateInvoke({
+      contract: getContract().address(),
+      method: "read_escrow",
+      args: [xdr.ScVal.scvSymbol(escrowId)],
+    });
+    return result;
   },
 
-  /**
-   * Fetch only the legal-hold flag (lighter call for gating checks).
-   * @param {string} escrowId
-   * @returns {Promise<boolean>}
-   */
-  async getLegalHold(escrowId) { // eslint-disable-line no-unused-vars
-    // TODO: replace with actual on-chain call to get_legal_hold()
-    throw new Error("onChainAdapter.getLegalHold not implemented");
+  async getLegalHold(escrowId) {
+    if (!CONTRACT_ID) throw new Error("GRANT_STREAM_CONTRACT_ID not set");
+    const result = await getServer().simulateInvoke({
+      contract: getContract().address(),
+      method: "get_legal_hold",
+      args: [xdr.ScVal.scvSymbol(escrowId)],
+    });
+    return result;
   },
 };
 

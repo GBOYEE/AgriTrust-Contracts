@@ -46,6 +46,7 @@ fn fund_stream(
         &SCALING_FACTOR,
         &0,
         &None,
+        &None,
     );
 }
 

@@ -1,12 +1,11 @@
 #![no_std]
 
 use soroban_sdk::{
-    contract, contracterror, contractimpl, contracttype, symbol_short, Address, Env, 
+    contracterror, contracttype, symbol_short, Address, Env, 
     token, Vec, Map, IntoVal, TryIntoVal, TryFromVal, Symbol,
 };
 use crate::storage_keys::StorageKey;
 
-#[contract]
 pub struct YieldTreasuryContract;
 
 // Yield-bearing status flags
@@ -213,30 +212,6 @@ fn preview_yield_position_value(position: &YieldPosition, now: u64) -> Result<i1
         .ok_or(YieldError::MathOverflow)
 }
 
-pub fn preview_pool_health(env: Env, total_liabilities: i128) -> Result<i128, YieldError> {
-    let reserve = read_reserve_balance(&env)?;
-    let mut total_assets = reserve;
-
-    if let Ok(position) = read_yield_position(&env) {
-        let now = env.ledger().timestamp();
-        let current_value = preview_yield_position_value(&position, now)?;
-        total_assets = total_assets.checked_add(current_value).ok_or(YieldError::MathOverflow)?;
-    }
-
-    if total_liabilities <= 0 {
-        return Ok(10000); // 1.0 if no liabilities
-    }
-
-    let risk_adjusted_assets = total_assets.checked_mul(9000).ok_or(YieldError::MathOverflow)? / 10000;
-    let health_factor = risk_adjusted_assets
-        .checked_mul(10000)
-        .ok_or(YieldError::MathOverflow)?
-        .checked_div(total_liabilities)
-        .ok_or(YieldError::MathOverflow)?;
-
-    Ok(health_factor)
-}
-
 fn ensure_reserve_ratio(
     env: &Env, 
     total_balance: i128, 
@@ -260,8 +235,31 @@ fn ensure_reserve_ratio(
     Ok(())
 }
 
-#[contractimpl]
 impl YieldTreasuryContract {
+    pub fn preview_pool_health(env: Env, total_liabilities: i128) -> Result<i128, YieldError> {
+        let reserve = read_reserve_balance(&env)?;
+        let mut total_assets = reserve;
+
+        if let Ok(position) = read_yield_position(&env) {
+            let now = env.ledger().timestamp();
+            let current_value = preview_yield_position_value(&position, now)?;
+            total_assets = total_assets.checked_add(current_value).ok_or(YieldError::MathOverflow)?;
+        }
+
+        if total_liabilities <= 0 {
+            return Ok(10000);
+        }
+
+        let risk_adjusted_assets = total_assets.checked_mul(9000).ok_or(YieldError::MathOverflow)? / 10000;
+        let health_factor = risk_adjusted_assets
+            .checked_mul(10000)
+            .ok_or(YieldError::MathOverflow)?
+            .checked_div(total_liabilities)
+            .ok_or(YieldError::MathOverflow)?;
+
+        Ok(health_factor)
+    }
+
     /// Initialize the yield treasury contract
     pub fn initialize(
         env: Env,

@@ -113,7 +113,7 @@ fn test_clawback_with_disputed_escrow() {
     assert!(donor_balance >= 490 * SCALING_FACTOR);
     
     // Verify escrow is cleared
-    let escrow_balance_after = client.get_dispute_escrow_balance(&grant_id);
+    let escrow_balance_after = client.try_get_dispute_escrow_balance(&grant_id);
     assert!(escrow_balance_after.is_err());
 }
 

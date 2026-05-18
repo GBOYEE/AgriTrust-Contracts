@@ -1,15 +1,13 @@
 #![no_std]
-use soroban_sdk::{contract, contractimpl, contracttype, symbol_short, token, Address, Env, Vec, Symbol};
+use soroban_sdk::{contracttype, symbol_short, token, Address, Env, Vec, Symbol};
 
 use super::{
     GrantStreamContract, GrantStatus, DataKey, Error,
     circuit_breakers::{self, CircuitBreakerKey}
 };
 
-#[contract]
 pub struct DisputeCircuitBreakerTest;
 
-#[contractimpl]
 impl DisputeCircuitBreakerTest {
     /// Test the mass dispute trigger circuit breaker functionality
     pub fn test_mass_dispute_trigger(env: Env) -> bool {

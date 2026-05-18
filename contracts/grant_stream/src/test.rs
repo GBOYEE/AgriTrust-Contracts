@@ -1,6 +1,6 @@
 #![cfg(test)]
 
-use super::{GrantStreamContract, GrantStreamContractClient, GrantStatus, SCALING_FACTOR};
+use super::{GrantStreamContract, GrantStreamContractClient, GrantStatus, Error, MIN_WITHDRAWAL, SCALING_FACTOR};
 use std::println;
 use soroban_sdk::{
     testutils::{Address as _, Ledger},
@@ -88,14 +88,14 @@ fn test_milestone_submission_deposit_refunded_on_approval() {
 
     let recipient_before = native_token.balance(&recipient);
     let contract_before = native_token.balance(&client.address);
-    client.submit_milestone_proof(&grant_id, &0u32, &Symbol::new(&env, "m0"), &0u64).unwrap();
+    client.submit_milestone_proof(&grant_id, &0u32, &Symbol::new(&env, "m0"), &0u64);
     let recipient_after_submit = native_token.balance(&recipient);
     let contract_after_submit = native_token.balance(&client.address);
 
     assert_eq!(recipient_after_submit, recipient_before - deposit);
     assert_eq!(contract_after_submit, contract_before + deposit);
 
-    client.approve_milestone_submission(&grant_id, &0u32).unwrap();
+    client.approve_milestone_submission(&grant_id, &0u32);
     let recipient_after_approval = native_token.balance(&recipient);
     let contract_after_approval = native_token.balance(&client.address);
 
@@ -119,8 +119,8 @@ fn test_milestone_submission_deposit_slashed_to_treasury() {
 
     let treasury_before = native_token.balance(&treasury);
     let contract_before = native_token.balance(&client.address);
-    client.submit_milestone_proof(&grant_id, &0u32, &Symbol::new(&env, "m1"), &0u64).unwrap();
-    client.slash_milestone_submission_deposit(&grant_id, &0u32).unwrap();
+    client.submit_milestone_proof(&grant_id, &0u32, &Symbol::new(&env, "m1"), &0u64);
+    client.slash_ms_submission_deposit(&grant_id, &0u32);
 
     let treasury_after = native_token.balance(&treasury);
     let contract_after = native_token.balance(&client.address);
@@ -168,14 +168,14 @@ fn test_current_claimable_amounts_are_previewed_without_storage_change() {
     let flow_rate = 1 * SCALING_FACTOR;
 
     set_timestamp(&env, 100);
-    client.create_grant(&grant_id, &recipient, &total_amount, &flow_rate, &0u64, &Some(validator.clone()));
+    client.create_grant(&grant_id, &recipient, &total_amount, &flow_rate, &0u64, &Some(validator.clone()), &None);
     set_timestamp(&env, 110);
 
-    let (claimable, validator_claimable) = client.get_current_claimable_amounts(&grant_id).unwrap();
+    let (claimable, validator_claimable) = client.get_current_claimable_amounts(&grant_id);
     assert_eq!(claimable, 95 * SCALING_FACTOR);
     assert_eq!(validator_claimable, 5 * SCALING_FACTOR);
 
-    let stored_grant = client.get_grant(&grant_id).unwrap();
+    let stored_grant = client.get_grant(&grant_id);
     assert_eq!(stored_grant.claimable, 0, "Preview query should not mutate stored grant state");
     assert_eq!(stored_grant.validator_claimable, 0, "Preview query should not mutate stored grant state");
 }
@@ -188,10 +188,10 @@ fn test_get_health_factor_is_read_only_preview() {
     let grant_id = 1u64;
     let recipient = Address::generate(&env);
 
-    client.create_grant(&grant_id, &recipient, &100_000i128, &1_000i128, &0u64, &None);
+    client.create_grant(&grant_id, &recipient, &100_000i128, &1_000i128, &0u64, &None, &None);
     env.storage().instance().set(&super::storage_keys::StorageKey::ReserveBalance, &100_000i128);
 
-    let health = client.get_health_factor().unwrap();
+    let health = client.get_health_factor();
     assert_eq!(health, 9000, "Health factor should reflect the current reserve and liabilities without mutating state");
 }
 
@@ -208,11 +208,11 @@ fn test_is_active_grantee_with_different_statuses() {
     let ragequit_grantee = Address::generate(&env);
     
     // Create grants for each user
-    client.create_grant(&1u64, &active_grantee, &1000000i128, &100i128, &0u64, &None);
-    client.create_grant(&2u64, &paused_grantee, &1000000i128, &100i128, &0u64, &None);
-    client.create_grant(&3u64, &completed_grantee, &1000000i128, &100i128, &0u64, &None);
-    client.create_grant(&4u64, &cancelled_grantee, &1000000i128, &100i128, &0u64, &None);
-    client.create_grant(&5u64, &ragequit_grantee, &1000000i128, &100i128, &0u64, &None);
+    client.create_grant(&1u64, &active_grantee, &1000000i128, &100i128, &0u64, &None, &None);
+    client.create_grant(&2u64, &paused_grantee, &1000000i128, &100i128, &0u64, &None, &None);
+    client.create_grant(&3u64, &completed_grantee, &1000000i128, &100i128, &0u64, &None, &None);
+    client.create_grant(&4u64, &cancelled_grantee, &1000000i128, &100i128, &0u64, &None, &None);
+    client.create_grant(&5u64, &ragequit_grantee, &1000000i128, &100i128, &0u64, &None, &None);
     
     // Test active grant (should return true)
     assert!(client.is_active_grantee(&active_grantee), "Active grantee should return true");
@@ -247,12 +247,12 @@ fn test_is_active_grantee_edge_cases() {
     let user_with_depleted_grant = Address::generate(&env);
     
     // Test 1: User with multiple active grants
-    client.create_grant(&1u64, &user_with_multiple_grants, &1000000i128, &100i128, &0u64, &None);
-    client.create_grant(&2u64, &user_with_multiple_grants, &500000i128, &50i128, &0u64, &None);
+    client.create_grant(&1u64, &user_with_multiple_grants, &1000000i128, &100i128, &0u64, &None, &None);
+    client.create_grant(&2u64, &user_with_multiple_grants, &500000i128, &50i128, &0u64, &None, &None);
     assert!(client.is_active_grantee(&user_with_multiple_grants), "User with multiple active grants should return true");
     
     // Test 2: User with one active and one completed grant
-    client.create_grant(&3u64, &user_with_depleted_grant, &1000i128, &100i128, &0u64, &None);
+    client.create_grant(&3u64, &user_with_depleted_grant, &1000i128, &100i128, &0u64, &None, &None);
     set_timestamp(&env, 100); // Allow streaming to complete
     // Small grant should be depleted
     let claimable = client.claimable(&3u64);
@@ -260,7 +260,7 @@ fn test_is_active_grantee_edge_cases() {
     
     // Test 3: Zero amount grant
     let zero_grant_user = Address::generate(&env);
-    client.create_grant(&4u64, &zero_grant_user, &0i128, &0i128, &0u64, &None);
+    client.create_grant(&4u64, &zero_grant_user, &0i128, &0i128, &0u64, &None, &None);
     // Zero amount grants should not be considered active
     assert!(!client.is_active_grantee(&zero_grant_user), "Zero amount grant should not be considered active");
 }
@@ -275,7 +275,7 @@ fn test_is_active_grantee_performance() {
     
     // Create multiple grants to test performance
     for i in 1..=10 {
-        client.create_grant(&i, &test_user, &1000000i128, &100i128, &0u64, &None);
+        client.create_grant(&i, &test_user, &1000000i128, &100i128, &0u64, &None, &None);
     }
     
     // Measure CPU instructions for multiple calls
@@ -304,7 +304,7 @@ fn test_is_active_grantee_archived_data() {
     let archived_grantee = Address::generate(&env);
     
     // Create a grant and then cancel it (simulating archived data)
-    client.create_grant(&1u64, &archived_grantee, &1000000i128, &100i128, &0u64, &None);
+    client.create_grant(&1u64, &archived_grantee, &1000000i128, &100i128, &0u64, &None, &None);
     assert!(client.is_active_grantee(&archived_grantee), "Active grant should return true");
     
     // Cancel the grant (simulating archival)
@@ -327,7 +327,7 @@ fn test_warmup() {
     let flow_rate = 100 * SCALING_FACTOR;
     let warmup_duration = 100; // 100 seconds warmup
     
-    client.create_grant(&grant_id, &recipient, &(10000 * SCALING_FACTOR), &flow_rate, &warmup_duration, &None);
+    client.create_grant(&grant_id, &recipient, &(10000 * SCALING_FACTOR), &flow_rate, &warmup_duration, &None, &None);
 
     set_timestamp(&env, 1100);
     assert_eq!(client.claimable(&grant_id), 10000 * SCALING_FACTOR);
@@ -347,7 +347,7 @@ fn test_rage_quit() {
     let total_amount = 1000 * SCALING_FACTOR;
     grant_token_admin.mint(&client.address, &total_amount);
     
-    client.create_grant(&grant_id, &recipient, &total_amount, &SCALING_FACTOR, &0, &None);
+    client.create_grant(&grant_id, &recipient, &total_amount, &SCALING_FACTOR, &0, &None, &None);
     
     set_timestamp(&env, 1100); // 100 tokens accrued
     client.pause_stream(&grant_id, &None);
@@ -366,7 +366,7 @@ fn test_apply_kpi_multiplier_requires_oracle_auth() {
     let recipient = Address::generate(&env);
     
     let grant_id = 1;
-    client.create_grant(&grant_id, &recipient, &(1000 * SCALING_FACTOR), &SCALING_FACTOR, &0, &None);
+    client.create_grant(&grant_id, &recipient, &(1000 * SCALING_FACTOR), &SCALING_FACTOR, &0, &None, &None);
     
     client.apply_kpi_multiplier(&grant_id, &20000); // 2x in basis points
     
@@ -413,7 +413,7 @@ fn test_withdraw_below_minimum_rejected() {
     // Flow rate: 0.5 USDC/sec — claimable after 1 sec is 0.5 USDC < 1 USDC minimum
     let flow_rate = SCALING_FACTOR / 2;
     grant_token_admin.mint(&client.address, &total_amount);
-    client.create_grant(&grant_id, &recipient, &total_amount, &flow_rate, &0, &None);
+    client.create_grant(&grant_id, &recipient, &total_amount, &flow_rate, &0, &None, &None);
 
     set_timestamp(&env, 1001); // only 0.5 USDC accrued
     let result = client.try_withdraw(&grant_id, &flow_rate);
@@ -434,7 +434,7 @@ fn test_withdraw_at_minimum_succeeds() {
     // Flow rate: 1 USDC/sec — claimable after 1 sec is exactly 1 USDC
     let flow_rate = MIN_WITHDRAWAL;
     grant_token_admin.mint(&client.address, &total_amount);
-    client.create_grant(&grant_id, &recipient, &total_amount, &flow_rate, &0, &None);
+    client.create_grant(&grant_id, &recipient, &total_amount, &flow_rate, &0, &None, &None);
 
     set_timestamp(&env, 1001); // exactly MIN_WITHDRAWAL accrued
     client.withdraw(&grant_id, &MIN_WITHDRAWAL);
@@ -453,7 +453,7 @@ fn test_withdraw_above_minimum_succeeds() {
     let total_amount = 1_000_000 * SCALING_FACTOR;
     let flow_rate = 5 * SCALING_FACTOR; // 5 USDC/sec
     grant_token_admin.mint(&client.address, &total_amount);
-    client.create_grant(&grant_id, &recipient, &total_amount, &flow_rate, &0, &None);
+    client.create_grant(&grant_id, &recipient, &total_amount, &flow_rate, &0, &None, &None);
 
     set_timestamp(&env, 1010); // 50 USDC accrued >> minimum
     client.withdraw(&grant_id, &(50 * SCALING_FACTOR));
@@ -475,7 +475,7 @@ fn test_change_grantee() {
     grant_token_admin.mint(&client.address, &total_amount);
     
     // Create grant with old recipient
-    client.create_grant(&grant_id, &old_recipient, &total_amount, &flow_rate, &0, &None);
+    client.create_grant(&grant_id, &old_recipient, &total_amount, &flow_rate, &0, &None, &None);
     
     // Verify initial state
     let grant = client.get_grant(&grant_id);
@@ -506,7 +506,7 @@ fn test_change_grantee_same_recipient_fails() {
     let recipient = Address::generate(&env);
     
     let grant_id = 1;
-    client.create_grant(&grant_id, &recipient, &(1000 * SCALING_FACTOR), &SCALING_FACTOR, &0, &None);
+    client.create_grant(&grant_id, &recipient, &(1000 * SCALING_FACTOR), &SCALING_FACTOR, &0, &None, &None);
     
     // Attempt to change to same recipient should fail
     let result = client.try_change_grantee(&grant_id, &recipient);
@@ -526,7 +526,7 @@ fn test_change_grantee_completed_grant_fails() {
     let total_amount = 100 * SCALING_FACTOR;
     grant_token_admin.mint(&client.address, &total_amount);
     
-    client.create_grant(&grant_id, &old_recipient, &total_amount, &SCALING_FACTOR, &0, &None);
+    client.create_grant(&grant_id, &old_recipient, &total_amount, &SCALING_FACTOR, &0, &None, &None);
     
     // Complete the grant
     set_timestamp(&env, 1100);

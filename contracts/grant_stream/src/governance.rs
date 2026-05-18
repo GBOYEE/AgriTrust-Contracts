@@ -1,9 +1,7 @@
 #![no_std]
 
 use soroban_sdk::{
-    contract,
     contracterror,
-    contractimpl,
     contracttype,
     symbol_short,
     token,
@@ -158,7 +156,6 @@ fn require_council_auth(env: &Env, caller: &Address) -> Result<(), GovernanceErr
 // Contract implementation
 // ---------------------------------------------------------------------------
 
-#[contractimpl]
 impl GovernanceContract {
     pub fn initialize(
         env: Env,
