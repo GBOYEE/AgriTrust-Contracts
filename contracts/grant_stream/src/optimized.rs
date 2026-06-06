@@ -900,10 +900,10 @@ mod milestone_oracle_tests {
     #[test]
     fn milestone_reaches_consensus_at_two_of_three() {
         let env = Env::default();
-    env.mock_all_auths();
-            let contract_id = env.register_contract(None, crate::GrantStreamContract);
-    let (_admin, _recipient) = setup_grant(&env, &contract_id);
-    with_contract(&env, &contract_id, |env| {
+        env.mock_all_auths();
+        let contract_id = env.register_contract(None, crate::GrantStreamContract);
+        let (_admin, _recipient) = setup_grant(&env, &contract_id);
+        with_contract(&env, &contract_id, |env| {
 
             let key1 = signing_key(1);
             let key2 = signing_key(2);
@@ -969,15 +969,16 @@ mod milestone_oracle_tests {
             let grant = GrantContract::get_grant(env.clone(), 7).unwrap();
             assert!(grant.milestone_met);
 
-    });}
+        });
+    }
 
     #[test]
     fn duplicate_oracle_approval_is_rejected() {
         let env = Env::default();
-    env.mock_all_auths();
-            let contract_id = env.register_contract(None, crate::GrantStreamContract);
-    let (_admin, _recipient) = setup_grant(&env, &contract_id);
-    with_contract(&env, &contract_id, |env| {
+        env.mock_all_auths();
+        let contract_id = env.register_contract(None, crate::GrantStreamContract);
+        let (_admin, _recipient) = setup_grant(&env, &contract_id);
+        with_contract(&env, &contract_id, |env| {
 
             let key1 = signing_key(11);
             let key2 = signing_key(12);
@@ -1012,15 +1013,16 @@ mod milestone_oracle_tests {
                 GrantContract::approve_milestone(env.clone(), 7, pk, duplicate_sig).unwrap_err();
             assert_eq!(err, Error::DuplicateOracleApproval);
 
-    });}
+        });
+    }
 
     #[test]
     fn milestone_stays_locked_after_dispute_window() {
         let env = Env::default();
-    env.mock_all_auths();
-            let contract_id = env.register_contract(None, crate::GrantStreamContract);
-    let (_admin, _recipient) = setup_grant(&env, &contract_id);
-    with_contract(&env, &contract_id, |env| {
+        env.mock_all_auths();
+        let contract_id = env.register_contract(None, crate::GrantStreamContract);
+        let (_admin, _recipient) = setup_grant(&env, &contract_id);
+        with_contract(&env, &contract_id, |env| {
 
             let key1 = signing_key(21);
             let key2 = signing_key(22);
@@ -1072,5 +1074,6 @@ mod milestone_oracle_tests {
             assert_eq!(final_state.approvers.len(), 1);
             assert!(!final_state.is_completed);
 
-    });}
+        });
+    }
 }
