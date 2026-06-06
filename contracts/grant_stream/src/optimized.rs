@@ -847,6 +847,11 @@ mod milestone_oracle_tests {
     use ed25519_dalek::{Signer, SigningKey};
     use soroban_sdk::{testutils::Address as _, Address, Env};
 
+    fn with_contract<F: FnOnce()>(env: &Env, f: F) {
+        let contract_id = env.register_contract(None, crate::GrantStreamContract);
+        env.as_contract(&contract_id, f);
+    }
+
     fn signing_key(seed: u8) -> SigningKey {
         SigningKey::from_bytes(&[seed; 32])
     }
@@ -895,164 +900,170 @@ mod milestone_oracle_tests {
     fn milestone_reaches_consensus_at_two_of_three() {
         let env = Env::default();
         let (_admin, _recipient) = setup_grant(&env);
+        with_contract(&env, || {
 
-        let key1 = signing_key(1);
-        let key2 = signing_key(2);
-        let key3 = signing_key(3);
-        let oracle_keys = Vec::from_array(
-            &env,
-            [
-                bytesn32(&env, key1.verifying_key().to_bytes()),
-                bytesn32(&env, key2.verifying_key().to_bytes()),
-                bytesn32(&env, key3.verifying_key().to_bytes()),
-            ],
-        );
+            let key1 = signing_key(1);
+            let key2 = signing_key(2);
+            let key3 = signing_key(3);
+            let oracle_keys = Vec::from_array(
+                &env,
+                [
+                    bytesn32(&env, key1.verifying_key().to_bytes()),
+                    bytesn32(&env, key2.verifying_key().to_bytes()),
+                    bytesn32(&env, key3.verifying_key().to_bytes()),
+                ],
+            );
 
-        GrantContract::configure_milestone_oracles(
-            env.clone(),
-            7,
-            oracle_keys,
-            2,
-            300,
-        )
-        .unwrap();
+            GrantContract::configure_milestone_oracles(
+                env.clone(),
+                7,
+                oracle_keys,
+                2,
+                300,
+            )
+            .unwrap();
 
-        let evidence_hash = bytesn32(&env, [9; 32]);
-        GrantContract::submit_milestone_evidence(env.clone(), 7, evidence_hash.clone()).unwrap();
+            let evidence_hash = bytesn32(&env, [9; 32]);
+            GrantContract::submit_milestone_evidence(env.clone(), 7, evidence_hash.clone()).unwrap();
 
-        let state = GrantContract::get_milestone_consensus(env.clone(), 7).unwrap();
-        assert_eq!(state.approvers.len(), 0);
-        assert!(!state.is_completed);
+            let state = GrantContract::get_milestone_consensus(env.clone(), 7).unwrap();
+            assert_eq!(state.approvers.len(), 0);
+            assert!(!state.is_completed);
 
-        let sig1 = sign_approval(&env, 7, &evidence_hash, state.dispute_window_end, &key1);
-        let sig2 = sign_approval(&env, 7, &evidence_hash, state.dispute_window_end, &key2);
+            let sig1 = sign_approval(&env, 7, &evidence_hash, state.dispute_window_end, &key1);
+            let sig2 = sign_approval(&env, 7, &evidence_hash, state.dispute_window_end, &key2);
 
-        assert_eq!(
+            assert_eq!(
+                GrantContract::approve_milestone(
+                    env.clone(),
+                    7,
+                    bytesn32(&env, key1.verifying_key().to_bytes()),
+                    sig1,
+                )
+                .unwrap(),
+                1
+            );
+
+            let interim = GrantContract::get_milestone_consensus(env.clone(), 7).unwrap();
+            assert_eq!(interim.approvers.len(), 1);
+            assert!(!interim.is_completed);
+
+            assert_eq!(
+                GrantContract::approve_milestone(
+                    env.clone(),
+                    7,
+                    bytesn32(&env, key2.verifying_key().to_bytes()),
+                    sig2,
+                )
+                .unwrap(),
+                2
+            );
+
+            let finalized = GrantContract::get_milestone_consensus(env.clone(), 7).unwrap();
+            assert_eq!(finalized.approvers.len(), 2);
+            assert!(finalized.is_completed);
+
+            let grant = GrantContract::get_grant(env.clone(), 7).unwrap();
+            assert!(grant.milestone_met);
+
+        });}
+
+    #[test]
+    fn duplicate_oracle_approval_is_rejected() {
+        let env = Env::default();
+        let (_admin, _recipient) = setup_grant(&env);
+        with_contract(&env, || {
+
+            let key1 = signing_key(11);
+            let key2 = signing_key(12);
+            let key3 = signing_key(13);
+            GrantContract::configure_milestone_oracles(
+                env.clone(),
+                7,
+                Vec::from_array(
+                    &env,
+                    [
+                        bytesn32(&env, key1.verifying_key().to_bytes()),
+                        bytesn32(&env, key2.verifying_key().to_bytes()),
+                        bytesn32(&env, key3.verifying_key().to_bytes()),
+                    ],
+                ),
+                2,
+                300,
+            )
+            .unwrap();
+
+            let evidence_hash = bytesn32(&env, [7; 32]);
+            GrantContract::submit_milestone_evidence(env.clone(), 7, evidence_hash.clone()).unwrap();
+            let state = GrantContract::get_milestone_consensus(env.clone(), 7).unwrap();
+            let pk = bytesn32(&env, key1.verifying_key().to_bytes());
+            let sig = sign_approval(&env, 7, &evidence_hash, state.dispute_window_end, &key1);
+
+            GrantContract::approve_milestone(env.clone(), 7, pk.clone(), sig).unwrap();
+
+            let duplicate_sig =
+                sign_approval(&env, 7, &evidence_hash, state.dispute_window_end, &key1);
+            let err =
+                GrantContract::approve_milestone(env.clone(), 7, pk, duplicate_sig).unwrap_err();
+            assert_eq!(err, Error::DuplicateOracleApproval);
+
+        });}
+
+    #[test]
+    fn milestone_stays_locked_after_dispute_window() {
+        let env = Env::default();
+        let (_admin, _recipient) = setup_grant(&env);
+        with_contract(&env, || {
+
+            let key1 = signing_key(21);
+            let key2 = signing_key(22);
+            let key3 = signing_key(23);
+            GrantContract::configure_milestone_oracles(
+                env.clone(),
+                7,
+                Vec::from_array(
+                    &env,
+                    [
+                        bytesn32(&env, key1.verifying_key().to_bytes()),
+                        bytesn32(&env, key2.verifying_key().to_bytes()),
+                        bytesn32(&env, key3.verifying_key().to_bytes()),
+                    ],
+                ),
+                2,
+                10,
+            )
+            .unwrap();
+
+            let evidence_hash = bytesn32(&env, [3; 32]);
+            GrantContract::submit_milestone_evidence(env.clone(), 7, evidence_hash.clone()).unwrap();
+            let state = GrantContract::get_milestone_consensus(env.clone(), 7).unwrap();
+            let sig1 = sign_approval(&env, 7, &evidence_hash, state.dispute_window_end, &key1);
+
             GrantContract::approve_milestone(
                 env.clone(),
                 7,
                 bytesn32(&env, key1.verifying_key().to_bytes()),
                 sig1,
             )
-            .unwrap(),
-            1
-        );
+            .unwrap();
 
-        let interim = GrantContract::get_milestone_consensus(env.clone(), 7).unwrap();
-        assert_eq!(interim.approvers.len(), 1);
-        assert!(!interim.is_completed);
+            env.ledger().with_mut(|ledger| {
+                ledger.timestamp = state.dispute_window_end + 1;
+            });
 
-        assert_eq!(
-            GrantContract::approve_milestone(
+            let sig2 = sign_approval(&env, 7, &evidence_hash, state.dispute_window_end, &key2);
+            let err = GrantContract::approve_milestone(
                 env.clone(),
                 7,
                 bytesn32(&env, key2.verifying_key().to_bytes()),
                 sig2,
             )
-            .unwrap(),
-            2
-        );
+            .unwrap_err();
+            assert_eq!(err, Error::MilestoneWindowClosed);
 
-        let finalized = GrantContract::get_milestone_consensus(env.clone(), 7).unwrap();
-        assert_eq!(finalized.approvers.len(), 2);
-        assert!(finalized.is_completed);
+            let final_state = GrantContract::get_milestone_consensus(env.clone(), 7).unwrap();
+            assert_eq!(final_state.approvers.len(), 1);
+            assert!(!final_state.is_completed);
 
-        let grant = GrantContract::get_grant(env.clone(), 7).unwrap();
-        assert!(grant.milestone_met);
-    }
-
-    #[test]
-    fn duplicate_oracle_approval_is_rejected() {
-        let env = Env::default();
-        let (_admin, _recipient) = setup_grant(&env);
-
-        let key1 = signing_key(11);
-        let key2 = signing_key(12);
-        let key3 = signing_key(13);
-        GrantContract::configure_milestone_oracles(
-            env.clone(),
-            7,
-            Vec::from_array(
-                &env,
-                [
-                    bytesn32(&env, key1.verifying_key().to_bytes()),
-                    bytesn32(&env, key2.verifying_key().to_bytes()),
-                    bytesn32(&env, key3.verifying_key().to_bytes()),
-                ],
-            ),
-            2,
-            300,
-        )
-        .unwrap();
-
-        let evidence_hash = bytesn32(&env, [7; 32]);
-        GrantContract::submit_milestone_evidence(env.clone(), 7, evidence_hash.clone()).unwrap();
-        let state = GrantContract::get_milestone_consensus(env.clone(), 7).unwrap();
-        let pk = bytesn32(&env, key1.verifying_key().to_bytes());
-        let sig = sign_approval(&env, 7, &evidence_hash, state.dispute_window_end, &key1);
-
-        GrantContract::approve_milestone(env.clone(), 7, pk.clone(), sig).unwrap();
-
-        let duplicate_sig =
-            sign_approval(&env, 7, &evidence_hash, state.dispute_window_end, &key1);
-        let err =
-            GrantContract::approve_milestone(env.clone(), 7, pk, duplicate_sig).unwrap_err();
-        assert_eq!(err, Error::DuplicateOracleApproval);
-    }
-
-    #[test]
-    fn milestone_stays_locked_after_dispute_window() {
-        let env = Env::default();
-        let (_admin, _recipient) = setup_grant(&env);
-
-        let key1 = signing_key(21);
-        let key2 = signing_key(22);
-        let key3 = signing_key(23);
-        GrantContract::configure_milestone_oracles(
-            env.clone(),
-            7,
-            Vec::from_array(
-                &env,
-                [
-                    bytesn32(&env, key1.verifying_key().to_bytes()),
-                    bytesn32(&env, key2.verifying_key().to_bytes()),
-                    bytesn32(&env, key3.verifying_key().to_bytes()),
-                ],
-            ),
-            2,
-            10,
-        )
-        .unwrap();
-
-        let evidence_hash = bytesn32(&env, [3; 32]);
-        GrantContract::submit_milestone_evidence(env.clone(), 7, evidence_hash.clone()).unwrap();
-        let state = GrantContract::get_milestone_consensus(env.clone(), 7).unwrap();
-        let sig1 = sign_approval(&env, 7, &evidence_hash, state.dispute_window_end, &key1);
-
-        GrantContract::approve_milestone(
-            env.clone(),
-            7,
-            bytesn32(&env, key1.verifying_key().to_bytes()),
-            sig1,
-        )
-        .unwrap();
-
-        env.ledger().with_mut(|ledger| {
-            ledger.timestamp = state.dispute_window_end + 1;
-        });
-
-        let sig2 = sign_approval(&env, 7, &evidence_hash, state.dispute_window_end, &key2);
-        let err = GrantContract::approve_milestone(
-            env.clone(),
-            7,
-            bytesn32(&env, key2.verifying_key().to_bytes()),
-            sig2,
-        )
-        .unwrap_err();
-        assert_eq!(err, Error::MilestoneWindowClosed);
-
-        let final_state = GrantContract::get_milestone_consensus(env.clone(), 7).unwrap();
-        assert_eq!(final_state.approvers.len(), 1);
-        assert!(!final_state.is_completed);
-    }
+        });}
 }
