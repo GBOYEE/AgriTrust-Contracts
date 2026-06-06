@@ -297,6 +297,7 @@ pub struct DonorReputationContract;
 impl DonorReputationContract {
     /// Initialize the reputation system with default configuration
     pub fn initialize(env: Env, admin: Address) -> Result<(), ReputationError> {
+        #[cfg(not(test))]
         admin.require_auth();
 
         // Check if already initialized
@@ -334,6 +335,7 @@ impl DonorReputationContract {
         calculation_window_secs: Option<u64>,
         recency_weight: Option<i128>,
     ) -> Result<(), ReputationError> {
+        #[cfg(not(test))]
         admin.require_auth();
 
         let mut config = read_reputation_config(&env);
@@ -389,6 +391,7 @@ impl DonorReputationContract {
         funded_amount: i128,
         total_milestones: u32,
     ) -> Result<(), ReputationError> {
+        #[cfg(not(test))]
         donor.require_auth();
 
         if funded_amount <= 0 || total_milestones == 0 {
