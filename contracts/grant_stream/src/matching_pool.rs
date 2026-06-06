@@ -668,16 +668,16 @@ mod tests {
 
     #[test]
     fn test_isqrt_fixed_point() {
-        // Test: sqrt(4 * FIXED_POINT_SCALE) = 2 * FIXED_POINT_SCALE
+        // Test: sqrt(4 * FIXED_POINT_SCALE) ≈ 2 * 10^9
         let input = 4 * FIXED_POINT_SCALE;
         let result = isqrt_fixed_point(input).unwrap();
         // Allow for some rounding error
-        assert!((result - 2 * FIXED_POINT_SCALE).abs() < FIXED_POINT_SCALE / 1000);
+        assert!((result - 2_000_000_000i128).abs() < FIXED_POINT_SCALE / 1000);
 
         // Test: sqrt(1 * FIXED_POINT_SCALE) = 1 * FIXED_POINT_SCALE
         let input = FIXED_POINT_SCALE;
         let result = isqrt_fixed_point(input).unwrap();
-        assert!((result - FIXED_POINT_SCALE).abs() < FIXED_POINT_SCALE / 1000);
+        assert!((result - 1_000_000_000i128).abs() < FIXED_POINT_SCALE / 1000);
 
         // Test: sqrt(0) = 0
         let result = isqrt_fixed_point(0).unwrap();
