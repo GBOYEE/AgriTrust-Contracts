@@ -1,57 +1,41 @@
-# AgriTrust Protocol Contracts
+# AgriTrust-Contracts
 
-Smart contracts for managing trust streams with milestone completion proof hashing and integrated dispute resolution system.
+Smart contracts for managing trust streams with milestone completion proof hashing and integrated dispute resolution system on Stellar (Soroban WASM) and Ethereum/L2s (Solidity).
 
-## Overview
+## 🚀 Key Features
+* **Per-Second Streaming Accrual:** High-precision streaming logic using scaling factors on Soroban.
+* **Legal Anchoring & Escrow:** Restricts fund streaming until legal documents are cryptographically signed on-chain, alongside an integrated arbitration escrow.
+* **Multi-Chain Smart Contracts:** Soroban-based smart contract implementation alongside a Foundry/Solidity implementation supporting ZK proof verification.
 
-This repository contains multiple implementations for trust management:
-1. **Soroban (Stellar) Implementation**: High-precision per-second streaming with legal anchoring and cross-chain interoperability.
-2. **Solidity (Ethereum/L2) Implementation**: Milestone-based releasing with integrated dispute resolution and ZK proofs and new work.
+## 🛠️ Tech Stack
+* **Language/Framework:** Rust / Soroban WASM, Solidity / Foundry
+* **Key Dependencies:** `soroban-sdk`, `foundry-rs`
 
----
+## 📦 Getting Started
 
-## Soroban Implementation (Stellar)
+### Prerequisites
+Ensure you have the required toolchains installed:
+* Rust toolchain (cargo, rustc)
+* Stellar CLI / Soroban CLI
+* Foundry (forge)
 
-Located in `contracts/grant_stream/`.
-
-### Key Features
-- **Per-Second Accrual**: High-precision streaming logic using scaling factors.
-- **Legal Anchoring**: Prevent fund streaming until legal documents are cryptographically signed on-chain.
-- **Cross-Chain Interoperability**: Compact byte-array status emission for bridge monitoring.
-- **Wrapped Asset Security**: Emergency halts and security buffers for non-native assets.
-- **Yield Treasury**: Integration with external yield aggregators for capital efficiency.
-
-### Development (Soroban)
+### Installation & Local Setup
 ```bash
-# Build
+# Clone the repository (if running manually)
+git clone https://github.com/AgriTrust-Protocol/AgriTrust-Contracts
+
+# Build Soroban contracts
 stellar contract build
 
-# Test
+# Run cargo tests
 cargo test
-```
 
----
-
-## Solidity Implementation
-
-Located in `foundry/`.
-
-### Key Features
-- **Arbitration Escrow**: Secure fund holding during disputes with third-party arbitrators.
-- **ZK Proof Verification**: Anonymous verification of grant conditions.
-- **Milestone Hashing**: SHA-256 proof submission for deliverables.
-
-### Development (Solidity)
-```bash
-# Build
+# Build Solidity contracts
 forge build
 
-# Test
+# Run foundry tests
 forge test
 ```
 
-## Contributing
-Please follow the contribution guidelines and ensure all tests pass before submitting pull requests.
-
-## License
-MIT License
+## 🤝 Contributing
+Contributions are highly welcome. Please ensure your commits are cryptographically signed using GPG or SSH keys. For major structural changes, please open an issue first to discuss your proposal.
