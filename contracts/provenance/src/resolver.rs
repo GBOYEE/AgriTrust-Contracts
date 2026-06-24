@@ -14,7 +14,7 @@ fn hop_key(env: &Env, hop_id: &BytesN<32>) -> Bytes {
     let mut key = Bytes::new(env);
     key.push_back(b'H');
     key.push_back(b'S');
-    key.append(&hop_id.to_bytes());
+    key.append(&Bytes::from_array(env, &hop_id.to_array()));
     key
 }
 
@@ -23,7 +23,7 @@ fn result_key(env: &Env, chain_id: &BytesN<32>) -> Bytes {
     let mut key = Bytes::new(env);
     key.push_back(b'P');
     key.push_back(b'R');
-    key.append(&chain_id.to_bytes());
+    key.append(&Bytes::from_array(env, &chain_id.to_array()));
     key
 }
 
