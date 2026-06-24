@@ -53,30 +53,37 @@ fn chain_id(env: &Env, seed: u8) -> BytesN<32> {
     BytesN::from_array(env, &raw)
 }
 
+fn with_contract<T>(env: &Env, f: impl FnOnce() -> T) -> T {
+    let contract_id = env.register_contract(None, crate::ProvenanceContract);
+    env.as_contract(&contract_id, f)
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[test]
 fn test_10_hop_chain_under_storage_budget() {
     let env = Env::default();
-    let hops = populate_chain(&env, 10);
-    let cid = chain_id(&env, 1);
+    with_contract(&env, || {
+        let hops = populate_chain(&env, 10);
+        let cid = chain_id(&env, 1);
 
-    let result = resolve_provenance(&env, cid, hops).expect("10-hop chain should resolve");
+        let result = resolve_provenance(&env, cid, hops).expect("10-hop chain should resolve");
 
-    // 10 reads + 1 write = 11 accesses.
-    assert_eq!(result.hops_resolved, 10);
-    assert_eq!(result.storage_accesses_used, 11);
+        // 10 reads + 1 write = 11 accesses.
+        assert_eq!(result.hops_resolved, 10);
+        assert_eq!(result.storage_accesses_used, 11);
 
-    // Well under both our soft limit (120) and Soroban's hard limit (~160).
-    assert!(
-        result.storage_accesses_used <= STORAGE_BUDGET,
-        "access count {} exceeded STORAGE_BUDGET {}",
-        result.storage_accesses_used,
-        STORAGE_BUDGET
-    );
+        // Well under both our soft limit (120) and Soroban's hard limit (~160).
+        assert!(
+            result.storage_accesses_used <= STORAGE_BUDGET,
+            "access count {} exceeded STORAGE_BUDGET {}",
+            result.storage_accesses_used,
+            STORAGE_BUDGET
+        );
 
-    // Average of ten 1.0 scores = 1.0.
-    assert_eq!(result.final_score.raw, SCORE_PRECISION);
+        // Average of ten 1.0 scores = 1.0.
+        assert_eq!(result.final_score.raw, SCORE_PRECISION);
+    });
 }
 
 #[test]
@@ -103,25 +110,30 @@ fn test_empty_chain_rejected() {
 #[test]
 fn test_chain_too_long_rejected() {
     let env = Env::default();
-    let hops = populate_chain(&env, MAX_HOPS + 1);
-    let cid = chain_id(&env, 3);
-    let err = resolve_provenance(&env, cid, hops).expect_err("oversized chain must fail");
-    assert_eq!(err, Error::ChainTooLong);
+    with_contract(&env, || {
+        let hops = populate_chain(&env, MAX_HOPS + 1);
+        let cid = chain_id(&env, 3);
+        let err = resolve_provenance(&env, cid, hops).expect_err("oversized chain must fail");
+        assert_eq!(err, Error::ChainTooLong);
+    });
 }
 
 #[test]
 fn test_missing_hop_returns_not_found() {
     let env = Env::default();
+    with_contract(&env, || {
     let mut ids = populate_chain(&env, 1); // 1 real hop
     ids.push_back(chain_id(&env, 99)); // phantom — no storage entry
     let cid = chain_id(&env, 4);
     let err = resolve_provenance(&env, cid, ids).expect_err("missing hop must fail");
     assert_eq!(err, Error::HopNotFound);
+    });
 }
 
 #[test]
 fn test_invalid_signature_rejected() {
     let env = Env::default();
+    with_contract(&env, || {
     let cred = [0xA0u8; 32];
     let state = HopState {
         index: 0,
@@ -140,11 +152,13 @@ fn test_invalid_signature_rejected() {
     let err = resolve_provenance(&env, chain_id(&env, 5), ids)
         .expect_err("zeroed sig must fail");
     assert_eq!(err, Error::InvalidHopSignature);
+    });
 }
 
 #[test]
 fn test_invalid_credential_rejected() {
     let env = Env::default();
+    with_contract(&env, || {
     let cred = [0xC0u8; 32];
     let mut sig = [0xFFu8; 64];
     sig[0] = 0x01;
@@ -165,6 +179,7 @@ fn test_invalid_credential_rejected() {
     let err = resolve_provenance(&env, chain_id(&env, 6), ids)
         .expect_err("zero recorded_at must fail");
     assert_eq!(err, Error::InvalidHopCredential);
+    });
 }
 
 #[test]
@@ -208,6 +223,7 @@ fn test_provenance_access_set_estimated_accesses() {
 #[test]
 fn test_result_persisted_and_retrievable() {
     let env = Env::default();
+    with_contract(&env, || {
     let hops = populate_chain(&env, 5);
     let cid = chain_id(&env, 7);
 
@@ -219,12 +235,14 @@ fn test_result_persisted_and_retrievable() {
     assert_eq!(persisted.hops_resolved, result.hops_resolved);
     assert_eq!(persisted.storage_accesses_used, result.storage_accesses_used);
     assert_eq!(persisted.final_score.raw, result.final_score.raw);
+    });
 }
 
 /// Test that verifies detailed storage access tracking (reads vs writes) for a 10-hop chain.
 #[test]
 fn test_detailed_storage_access_tracking() {
     let env = Env::default();
+    with_contract(&env, || {
     let hops = populate_chain(&env, 10);
     let cid = chain_id(&env, 1);
 
@@ -248,12 +266,14 @@ fn test_detailed_storage_access_tracking() {
 
     // Average of ten 1.0 scores = 1.0
     assert_eq!(result.final_score.raw, SCORE_PRECISION);
+    });
 }
 
 /// Test that StorageBudgetExceeded is returned when approaching limits
 #[test]
 fn test_storage_budget_exceeded_error() {
     let env = Env::default();
+    with_contract(&env, || {
     
     // Test that we get StorageBudgetExceeded when we try to exceed the limit
     // We'll test this by manually creating a scenario that would exceed
@@ -265,4 +285,5 @@ fn test_storage_budget_exceeded_error() {
     
     let err = resolve_provenance(&env, cid, too_many_hops).expect_err("oversized chain must fail");
     assert_eq!(err, Error::ChainTooLong);
+    });
 }
