@@ -1,5 +1,15 @@
 #![no_std]
+#[cfg(test)]
+extern crate std;
 use soroban_sdk::{contract, contractimpl, contracttype, token, Address, Env};
+
+#[cfg(test)]
+mod test;
+
+pub mod settlement;
+
+pub const TTL_EXTENSION_PERIOD: u32 = 518_400; // 30 days in ledgers (~5s per ledger)
+pub const MAX_SETTLEMENT_WINDOW: u64 = 30 * 24 * 60 * 60; // 30 days in seconds
 
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -8,6 +18,38 @@ pub enum DataKey {
     Token,
     DisputeCounter,
     Dispute(u32),
+    EscrowLock(u32),
+    EscrowRelease(u32),
+    EscrowTtlDeadline(u32),
+    EscrowCycleCounter,
+    ExpiredEscrows,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EscrowLockData {
+    pub buyer: Address,
+    pub seller: Address,
+    pub arbitration_id: u32,
+    pub amount: i128,
+    pub locked_at: u64,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EscrowReleaseData {
+    pub buyer: Address,
+    pub seller: Address,
+    pub arbitration_id: u32,
+    pub amount: i128,
+    pub released_at: u64,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TtlDeadline {
+    pub ledger_sequence: u32,
+    pub ttl_extension_period: u32,
 }
 
 #[contracttype]
@@ -42,11 +84,13 @@ impl ArbitrationContract {
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage().instance().set(&DataKey::Token, &token);
         env.storage().instance().set(&DataKey::DisputeCounter, &0u32);
+        // Extend instance TTL so the contract survives the max settlement window
+        env.storage().instance().extend_ttl(0, 518_400);
     }
 
     pub fn raise_dispute(env: Env, grant_id: u32, funder: Address, grantee: Address, amount: i128, arbitrator: Address) -> u32 {
         funder.require_auth();
-        
+
         let token_addr: Address = env.storage().instance().get(&DataKey::Token).unwrap();
         let token_client = token::Client::new(&env, &token_addr);
         token_client.transfer(&funder, &env.current_contract_address(), &amount);
@@ -71,7 +115,7 @@ impl ArbitrationContract {
     pub fn resolve_dispute(env: Env, dispute_id: u32, funder_award: i128, grantee_award: i128) {
         let mut dispute: Dispute = env.storage().persistent().get(&DataKey::Dispute(dispute_id)).unwrap();
         dispute.arbitrator.require_auth();
-        
+
         if dispute.status == DisputeStatus::Resolved { panic!("Already resolved"); }
         if funder_award + grantee_award > dispute.amount { panic!("Awards exceed amount"); }
 
@@ -88,5 +132,49 @@ impl ArbitrationContract {
         }
 
         env.storage().persistent().set(&DataKey::Dispute(dispute_id), &dispute);
+    }
+
+    // ── Escrow Settlement Functions ──────────────────────────────────────────
+
+    pub fn lock_settlement(
+        env: Env,
+        cycle: u32,
+        buyer: Address,
+        seller: Address,
+        arbitration_id: u32,
+        amount: i128,
+    ) {
+        settlement::lock_settlement(&env, cycle, &buyer, &seller, arbitration_id, amount);
+    }
+
+    pub fn release_settlement(
+        env: Env,
+        cycle: u32,
+        buyer: Address,
+        seller: Address,
+        arbitration_id: u32,
+        amount: i128,
+    ) {
+        settlement::release_settlement(&env, cycle, &buyer, &seller, arbitration_id, amount);
+    }
+
+    pub fn synchronize_escrow_ttl(env: Env, cycle: u32) {
+        settlement::synchronize_escrow_ttl(&env, cycle);
+    }
+
+    pub fn garbage_collect_expired_escrows(env: Env, max_cycles: u32) -> u32 {
+        settlement::garbage_collect_expired_escrows(&env, max_cycles)
+    }
+
+    pub fn get_escrow_lock(env: Env, cycle: u32) -> Option<EscrowLockData> {
+        env.storage().persistent().get(&DataKey::EscrowLock(cycle))
+    }
+
+    pub fn get_escrow_release(env: Env, cycle: u32) -> Option<EscrowReleaseData> {
+        env.storage().persistent().get(&DataKey::EscrowRelease(cycle))
+    }
+
+    pub fn get_escrow_ttl_deadline(env: Env, cycle: u32) -> Option<TtlDeadline> {
+        env.storage().persistent().get(&DataKey::EscrowTtlDeadline(cycle))
     }
 }
