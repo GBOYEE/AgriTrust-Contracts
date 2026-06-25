@@ -1,5 +1,7 @@
 #![no_std]
 
+mod scheduler;
+
 use agritrust_common::storage_keys::{
     derive_legacy_storage_key, derive_storage_key, DOMAIN_VESTING,
 };
