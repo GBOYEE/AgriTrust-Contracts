@@ -103,6 +103,41 @@ impl DeadMansSwitchContract {
         env.storage().instance().set(&SwitchKey::RecoveryVault, &new_vault);
     }
 
+    /// Reset the Dead Man's Switch after an admin transfer.
+    ///
+    /// Called by AdminContract::accept_ownership() to prevent the old admin's
+    /// designated beneficiary from retaining recovery rights after ownership change.
+    ///
+    /// Resets:
+    /// - PrimaryAdmin to the new admin
+    /// - RecoveryVault to the new admin (beneficiary must be explicitly re-set)
+    /// - LastActivityAt to current timestamp (restart inactivity countdown)
+    /// - RecoveryExecuted to false (fresh state)
+    pub fn reset_on_admin_transfer(env: Env, old_admin: Address, new_admin: Address) {
+        // Only the current primary admin or the pending admin can trigger this
+        let current_admin: Address = env.storage().instance()
+            .get(&SwitchKey::PrimaryAdmin)
+            .expect("Admin not set");
+
+        if old_admin != current_admin {
+            panic!("Unauthorized: old_admin does not match current primary admin");
+        }
+
+        // Verify the new admin is authorizing this reset
+        new_admin.require_auth();
+
+        // Reset DMS state for the new admin
+        env.storage().instance().set(&SwitchKey::PrimaryAdmin, &new_admin);
+        env.storage().instance().set(&SwitchKey::RecoveryVault, &new_admin);
+        env.storage().instance().set(&SwitchKey::LastActivityAt, &env.ledger().timestamp());
+        env.storage().instance().set(&SwitchKey::RecoveryExecuted, &false);
+
+        env.events().publish(
+            (soroban_sdk::symbol_short!("dms_reset"),),
+            (old_admin, new_admin),
+        );
+    }
+
     /// View how many seconds remain before the recovery vault can claim admin.
     pub fn time_until_recovery(env: Env) -> u64 {
         let last_activity: u64 = env

@@ -43,14 +43,14 @@ impl AdminContract {
     pub fn accept_ownership(env: Env) {
         let pending_admin: Address = env.storage().instance().get(&AdminKey::PendingAdmin).unwrap();
         pending_admin.require_auth();
-        
+
         let old_admin: Address = env.storage().instance().get(&AdminKey::ActiveAdmin).unwrap();
-        
+
         env.storage().instance().set(&AdminKey::ActiveAdmin, &pending_admin);
         env.storage().instance().remove(&AdminKey::PendingAdmin);
 
         env.events().publish(
-            (symbol_short!("own_trans"),), 
+            (symbol_short!("own_trans"),),
             (old_admin.clone(), pending_admin.clone())
         );
 
@@ -65,5 +65,10 @@ impl AdminContract {
             let monitor_client = governance_activity_monitor::GovernanceActivityMonitorClient::new(&env, &monitor_contract);
             monitor_client.record_activity(&pending_admin);
         }
+
+        // CRITICAL: Reset Dead Man's Switch to prevent old admin's beneficiary
+        // from retaining recovery rights after ownership transfer (issue #12)
+        let dms_contract = dead_mans_switch::DeadMansSwitchContractClient::new(&env, &env.current_contract_address());
+        dms_contract.reset_on_admin_transfer(&old_admin, &pending_admin);
     }
 }
