@@ -31,6 +31,13 @@ This fuzz test focuses on the `calculate_flow` logic (implemented in `calculate_
 - **High Flow Rates**: Stress tests with large flow rates
 - **Multiple Checkpoints**: Verifies consistency at various time points
 
+### 5. Loan Grace Period Temporal Testing (`test_grace_period_temporal_fuzz`)
+- **Oracle Model**: `GracePeriodOracle` converts `GRACE_PERIOD_SECONDS` into ledgers using the configured `expected_ledger_secs`.
+- **Stored Deadline**: `check_default()` stores `default_ledger`, `grace_deadline`, and slippage once, so later oracle changes do not stretch or shrink an already-open grace period.
+- **Boundary Checks**: Catch-up at `grace_deadline - 1` and `grace_deadline` is accepted; catch-up at `grace_deadline + 1` is rejected.
+- **Congestion Case**: With `expected_ledger_secs = 60`, the 30-day grace period is 43,200 ledgers.
+- **Fuzz Model**: Property tests generate balanced 5-120 second ledger-close sequences and verify the simulated real-time grace window remains within 1% of 30 days.
+
 ## Key Invariants Verified
 
 1. **Total Allocation Invariant**: `withdrawn + claimable ≤ total_amount` for each grant
@@ -38,6 +45,8 @@ This fuzz test focuses on the `calculate_flow` logic (implemented in `calculate_
 3. **Temporal Boundary Invariant**: No tokens available before stream start time
 4. **Flow Calculation Invariant**: Actual flow never exceeds expected maximum flow
 5. **Mathematical Precision Invariant**: No negative values or overflow conditions
+6. **Grace Deadline Invariant**: Grace checks use the stored `grace_deadline`, not a fresh computation from mutable oracle configuration
+7. **Grace Real-Time Invariant**: Under the configured expected ledger close duration, the grace period represents `GRACE_PERIOD_SECONDS` within fuzz tolerance
 
 ## Grant Configurations Tested
 
@@ -61,6 +70,9 @@ cargo test test_long_term_mathematical_precision --lib
 
 # Run with more test cases (slower but more thorough)
 cargo test test_temporal_fuzz --lib -- --test-threads=1
+
+# Run grace-period temporal coverage
+cargo test test_grace_period_temporal_fuzz --lib
 ```
 
 ## Test Parameters
@@ -80,6 +92,8 @@ The test will fail and report detailed errors if:
 3. **Mathematical Errors**: Overflow, underflow, or precision loss
 4. **State Corruption**: Inconsistent grant state
 5. **Global Invariant Violation**: Token creation/destruction bugs
+6. **Grace Drift**: Configured ledger duration produces a grace period outside the real-time tolerance
+7. **Boundary Regression**: Catch-up is rejected before the stored deadline or accepted after it
 
 ## Integration with Issue #298
 
@@ -90,6 +104,24 @@ This fuzz test directly addresses the requirements in issue #298:
 - ✅ **Boundary Testing**: Focuses on Start and End boundaries
 - ✅ **Allocation Verification**: Ensures withdrawn amount never exceeds total_allocation
 - ✅ **Final Ledger Protection**: Prevents extra tokens during final grant ledger
+
+## Grace Period Drift Compensation
+
+The grace period is specified in wall-clock seconds (`GRACE_PERIOD_SECONDS = 30 days`) but enforced on-chain by ledger sequence. To avoid hardcoding a stale ledger count, the contract stores a `GracePeriodOracle`:
+
+```rust
+grace_period_ledgers = ceil(GRACE_PERIOD_SECONDS / expected_ledger_secs)
+```
+
+The default expected close duration is 5 seconds. Operators can configure this value for congestion scenarios before default processing. When `check_default()` opens a grace window it stores:
+
+- `default_ledger = env.ledger().sequence()`
+- `grace_deadline = default_ledger + grace_period_ledgers`
+- `slippage_ledgers = oracle.slippage_ledgers`
+
+All subsequent grace checks use this stored deadline and tolerance. This avoids a desync where changing ledger-duration assumptions after default would silently extend or shorten the catch-up window.
+
+`GRACE_PERIOD_SLIPPAGE_LEDGERS` allows the exact deadline ledger to pass, but catch-up after `grace_deadline + 1` is rejected.
 
 ## Performance Considerations
 

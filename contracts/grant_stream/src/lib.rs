@@ -15,6 +15,11 @@ pub mod donor_reputation;
 // --- Constants ---
 pub const SCALING_FACTOR: i128 = 10_000_000; // 1e7
 pub const SEP38_STALENESS_SECONDS: u64 = 5 * 60;
+pub const GRACE_PERIOD_SECONDS: u64 = 30 * 24 * 60 * 60;
+pub const DEFAULT_EXPECTED_LEDGER_DURATION_SECONDS: u64 = 5;
+pub const GRACE_PERIOD_SLIPPAGE_LEDGERS: u32 = 10;
+pub const MAX_MISSED_DISTRIBUTIONS: u32 = 3;
+pub const LATE_FEE_BPS: i128 = 250;
 const XLM_DECIMALS: u32 = 7;
 const RENT_RESERVE_XLM: i128 = 5 * 10i128.pow(XLM_DECIMALS);
 const ZK_COMMITMENT_MODULUS: i128 = 170_141_183_460_469_231_731_687_303_715_884_105_727i128;
@@ -62,6 +67,8 @@ mod test_reputation_matching_integration;
 
 #[cfg(test)]
 mod test_sweeper;
+#[cfg(test)]
+mod test_grace_period_temporal_fuzz;
 
 // --- Types ---
 
@@ -175,6 +182,28 @@ pub struct ClaimFiatValue {
     pub claim_ledger_sequence: u32,
     pub claim_ledger_timestamp: u64,
     pub price_data_missing: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[contracttype]
+pub struct GracePeriodOracle {
+    pub grace_period_seconds: u64,
+    pub expected_ledger_secs: u64,
+    pub grace_period_ledgers: u32,
+    pub slippage_ledgers: u32,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[contracttype]
+pub struct GracePeriodState {
+    pub default_ledger: u32,
+    pub grace_deadline: u32,
+    pub slippage_ledgers: u32,
+    pub missed_distributions: u32,
+    pub missed_amount: i128,
+    pub paid_amount: i128,
+    pub late_fee: i128,
+    pub resolved: bool,
 }
 
 // Legacy DataKey alias preserved for backward compatibility.
@@ -385,6 +414,70 @@ fn record_claim_value(
 
 fn read_treasury(env: &Env) -> Result<Address, Error> {
     env.storage().instance().get(&StorageKey::Treasury).ok_or(Error::NotInitialized)
+}
+
+fn build_grace_period_oracle(
+    expected_ledger_secs: u64,
+    slippage_ledgers: u32,
+) -> Result<GracePeriodOracle, Error> {
+    if expected_ledger_secs == 0 {
+        return Err(Error::InvalidTimestamp);
+    }
+
+    let ledgers = GRACE_PERIOD_SECONDS
+        .checked_add(expected_ledger_secs - 1)
+        .ok_or(Error::MathOverflow)?
+        .checked_div(expected_ledger_secs)
+        .ok_or(Error::MathOverflow)?;
+    if ledgers == 0 || ledgers > u32::MAX as u64 {
+        return Err(Error::MathOverflow);
+    }
+
+    Ok(GracePeriodOracle {
+        grace_period_seconds: GRACE_PERIOD_SECONDS,
+        expected_ledger_secs,
+        grace_period_ledgers: ledgers as u32,
+        slippage_ledgers,
+    })
+}
+
+fn default_grace_period_oracle() -> Result<GracePeriodOracle, Error> {
+    build_grace_period_oracle(
+        DEFAULT_EXPECTED_LEDGER_DURATION_SECONDS,
+        GRACE_PERIOD_SLIPPAGE_LEDGERS,
+    )
+}
+
+fn read_grace_period_oracle(env: &Env) -> Result<GracePeriodOracle, Error> {
+    match env.storage().instance().get(&StorageKey::GracePeriodOracle) {
+        Some(oracle) => Ok(oracle),
+        None => default_grace_period_oracle(),
+    }
+}
+
+fn late_fee_for_missed_amount(missed_amount: i128) -> Result<i128, Error> {
+    if missed_amount < 0 {
+        return Err(Error::InvalidAmount);
+    }
+    missed_amount
+        .checked_mul(LATE_FEE_BPS)
+        .ok_or(Error::MathOverflow)?
+        .checked_div(10_000)
+        .ok_or(Error::MathOverflow)
+}
+
+fn grace_period_is_open(
+    state: &GracePeriodState,
+    current_ledger: u32,
+) -> bool {
+    if state.resolved {
+        return false;
+    }
+    if current_ledger < state.grace_deadline {
+        return true;
+    }
+    current_ledger == state.grace_deadline
+        && state.grace_deadline.saturating_sub(current_ledger) < state.slippage_ledgers
 }
 
 fn read_grant_ids(env: &Env) -> Vec<u64> {
@@ -824,6 +917,10 @@ impl GrantStreamContract {
         env.storage().instance().set(&StorageKey::NativeToken, &native_token);
         env.storage().instance().set(&StorageKey::GrantIds, &Vec::<u64>::new(&env));
         env.storage().instance().set(&StorageKey::Sep38DefaultFiat, &String::from_str(&env, "USD"));
+        let grace_oracle = default_grace_period_oracle()?;
+        env.storage()
+            .instance()
+            .set(&StorageKey::GracePeriodOracle, &grace_oracle);
         Ok(())
     }
 
@@ -869,6 +966,169 @@ impl GrantStreamContract {
         } else {
             None
         }
+    }
+
+    pub fn configure_grace_period_oracle(
+        env: Env,
+        expected_ledger_secs: u64,
+        slippage_ledgers: u32,
+    ) -> Result<GracePeriodOracle, Error> {
+        require_admin_auth(&env)?;
+        let oracle = build_grace_period_oracle(
+            expected_ledger_secs,
+            slippage_ledgers,
+        )?;
+        env.storage()
+            .instance()
+            .set(&StorageKey::GracePeriodOracle, &oracle);
+        env.events().publish(
+            (symbol_short!("gracecfg"),),
+            (
+                oracle.expected_ledger_secs,
+                oracle.grace_period_ledgers,
+                oracle.slippage_ledgers,
+            ),
+        );
+        Ok(oracle)
+    }
+
+    pub fn set_expected_ledger_seconds(
+        env: Env,
+        expected_ledger_secs: u64,
+    ) -> Result<GracePeriodOracle, Error> {
+        let slippage_ledgers = read_grace_period_oracle(&env)?.slippage_ledgers;
+        Self::configure_grace_period_oracle(
+            env,
+            expected_ledger_secs,
+            slippage_ledgers,
+        )
+    }
+
+    pub fn get_grace_period_oracle(env: Env) -> Result<GracePeriodOracle, Error> {
+        read_grace_period_oracle(&env)
+    }
+
+    pub fn check_default(
+        env: Env,
+        grant_id: u64,
+        missed_distributions: u32,
+        missed_amount: i128,
+    ) -> Result<GracePeriodState, Error> {
+        require_admin_auth(&env)?;
+        let _grant = read_grant(&env, grant_id)?;
+        if missed_amount <= 0 {
+            return Err(Error::InvalidAmount);
+        }
+
+        env.storage()
+            .instance()
+            .set(&StorageKey::MissedDistributionCount(grant_id), &missed_distributions);
+
+        if missed_distributions < MAX_MISSED_DISTRIBUTIONS {
+            return Err(Error::InvalidState);
+        }
+
+        let state_key = StorageKey::GracePeriodState(grant_id);
+        let late_fee = late_fee_for_missed_amount(missed_amount)?;
+
+        let state = match env.storage().instance().get::<_, GracePeriodState>(&state_key) {
+            Some(existing) if !existing.resolved => GracePeriodState {
+                missed_distributions,
+                missed_amount,
+                late_fee,
+                ..existing
+            },
+            _ => {
+                let oracle = read_grace_period_oracle(&env)?;
+                let default_ledger = env.ledger().sequence();
+                let grace_deadline = default_ledger
+                    .checked_add(oracle.grace_period_ledgers)
+                    .ok_or(Error::MathOverflow)?;
+                GracePeriodState {
+                    default_ledger,
+                    grace_deadline,
+                    slippage_ledgers: oracle.slippage_ledgers,
+                    missed_distributions,
+                    missed_amount,
+                    paid_amount: 0,
+                    late_fee,
+                    resolved: false,
+                }
+            }
+        };
+
+        env.storage().instance().set(&state_key, &state);
+        env.events().publish(
+            (symbol_short!("gracedef"), grant_id),
+            (state.default_ledger, state.grace_deadline, state.missed_amount, state.late_fee),
+        );
+        Ok(state)
+    }
+
+    pub fn apply_grace_period(env: Env, grant_id: u64) -> Result<bool, Error> {
+        let _grant = read_grant(&env, grant_id)?;
+        let state: GracePeriodState = env
+            .storage()
+            .instance()
+            .get(&StorageKey::GracePeriodState(grant_id))
+            .ok_or(Error::InvalidState)?;
+        let _missed_distributions: u32 = env
+            .storage()
+            .instance()
+            .get(&StorageKey::MissedDistributionCount(grant_id))
+            .unwrap_or(0);
+        Ok(grace_period_is_open(
+            &state,
+            env.ledger().sequence(),
+        ))
+    }
+
+    pub fn process_catchup(
+        env: Env,
+        grant_id: u64,
+        amount: i128,
+    ) -> Result<GracePeriodState, Error> {
+        let grant = read_grant(&env, grant_id)?;
+        grant.recipient.require_auth();
+        if amount <= 0 {
+            return Err(Error::InvalidAmount);
+        }
+
+        let state_key = StorageKey::GracePeriodState(grant_id);
+        let mut state: GracePeriodState = env
+            .storage()
+            .instance()
+            .get(&state_key)
+            .ok_or(Error::InvalidState)?;
+        if !grace_period_is_open(&state, env.ledger().sequence()) {
+            return Err(Error::InvalidState);
+        }
+
+        state.paid_amount = state
+            .paid_amount
+            .checked_add(amount)
+            .ok_or(Error::MathOverflow)?;
+        let required = state
+            .missed_amount
+            .checked_add(state.late_fee)
+            .ok_or(Error::MathOverflow)?;
+        if state.paid_amount >= required {
+            state.resolved = true;
+            env.storage()
+                .instance()
+                .set(&StorageKey::MissedDistributionCount(grant_id), &0_u32);
+        }
+
+        env.storage().instance().set(&state_key, &state);
+        env.events()
+            .publish((symbol_short!("catchup"), grant_id), (amount, state.paid_amount, state.resolved));
+        Ok(state)
+    }
+
+    pub fn get_grace_period_state(env: Env, grant_id: u64) -> Option<GracePeriodState> {
+        env.storage()
+            .instance()
+            .get(&StorageKey::GracePeriodState(grant_id))
     }
 
     pub fn create_grant(

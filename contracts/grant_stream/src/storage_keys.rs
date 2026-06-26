@@ -72,6 +72,12 @@ pub enum StorageKey {
     GrantMetrics(u64),
     /// Grant dispute status and resolution data
     GrantDisputeData(u64),
+    /// Global grace-period oracle used to convert wall-clock grace seconds to ledgers
+    GracePeriodOracle,
+    /// Stored default and grace-period deadline state keyed by grant ID
+    GracePeriodState(u64),
+    /// Consecutive missed distribution count keyed by grant ID
+    MissedDistributionCount(u64),
     /// Double-approval request for high-value milestone payouts
     DoubleApprovalRequest(u64, u32),
     /// Double-approval configuration and thresholds
@@ -377,6 +383,9 @@ impl StorageKey {
             | StorageKey::GrantValidatorData(_)
             | StorageKey::GrantMetrics(_)
             | StorageKey::GrantDisputeData(_)
+            | StorageKey::GracePeriodOracle
+            | StorageKey::GracePeriodState(_)
+            | StorageKey::MissedDistributionCount(_)
             | StorageKey::DoubleApprovalRequest(_, _)
             | StorageKey::DoubleApprovalConfig => "grant",
             
@@ -521,6 +530,9 @@ impl StorageKey {
             StorageKey::GrantValidatorData(_) => "Grant validator rewards data",
             StorageKey::GrantMetrics(_) => "Grant performance metrics",
             StorageKey::GrantDisputeData(_) => "Grant dispute status",
+            StorageKey::GracePeriodOracle => "Grace-period ledger conversion oracle",
+            StorageKey::GracePeriodState(_) => "Stored default ledger and grace deadline",
+            StorageKey::MissedDistributionCount(_) => "Consecutive missed distribution count",
             StorageKey::DoubleApprovalRequest(_, _) => "Double-approval request for milestone",
             StorageKey::DoubleApprovalConfig => "Double-approval configuration",
             
@@ -643,6 +655,7 @@ mod tests {
     fn test_storage_key_namespace() {
         assert_eq!(StorageKey::Admin.namespace(), "core");
         assert_eq!(StorageKey::Grant(123).namespace(), "grant");
+        assert_eq!(StorageKey::GracePeriodState(123).namespace(), "grant");
         assert_eq!(StorageKey::RecipientGrants(address()).namespace(), "user");
         assert_eq!(StorageKey::TreasuryConfig.namespace(), "treasury");
         assert_eq!(StorageKey::Proposal(456).namespace(), "governance");
