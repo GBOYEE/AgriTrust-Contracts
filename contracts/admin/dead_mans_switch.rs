@@ -103,6 +103,47 @@ impl DeadMansSwitchContract {
         env.storage().instance().set(&SwitchKey::RecoveryVault, &new_vault);
     }
 
+    /// Reset the Dead Man's Switch activity timer.
+    ///
+    /// Called by the admin contract during `accept_ownership` to prevent
+    /// the old admin's activity timestamp from being retained after transfer.
+    /// Without this, the new admin could not trigger recovery because the
+    /// old admin's heartbeat is still "active" — or the old admin's last
+    /// activity is carried over to the new admin's tenure.
+    ///
+    /// Only the current primary admin or recovery vault can call this.
+    pub fn reset_dms_on_admin_transfer(env: Env, caller: Address) {
+        caller.require_auth();
+        // Verify caller is either the current primary admin or recovery vault
+        let primary_admin: Address = env
+            .storage()
+            .instance()
+            .get(&SwitchKey::PrimaryAdmin)
+            .expect("Primary admin not set");
+        let recovery_vault: Address = env
+            .storage()
+            .instance()
+            .get(&SwitchKey::RecoveryVault)
+            .expect("Recovery vault not set");
+
+        if caller != primary_admin && caller != recovery_vault {
+            panic!("Unauthorized: only primary admin or recovery vault can reset DMS");
+        }
+
+        // Reset the activity timer to zero to prevent beneficiary retention
+        // with the old admin's timestamp. The new admin must heartbeat
+        // within the inactivity period or the recovery vault can claim.
+        env.storage().instance().set(&SwitchKey::LastActivityAt, &0u64);
+
+        // Reset the recovery executed flag so the new admin cycle starts fresh
+        env.storage().instance().set(&SwitchKey::RecoveryExecuted, &false);
+
+        env.events().publish(
+            (soroban_sdk::symbol_short!("dms_reset"),),
+            (caller, env.ledger().timestamp()),
+        );
+    }
+
     /// View how many seconds remain before the recovery vault can claim admin.
     pub fn time_until_recovery(env: Env) -> u64 {
         let last_activity: u64 = env
