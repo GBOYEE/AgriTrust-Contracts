@@ -1,7 +1,8 @@
-C:\Users\dell\Grant-Stream-Contracts\target\debug\deps\zk_kyc.d: contracts\zk_kyc\src\lib.rs
+/root/repos/AgriTrust-Contracts/target/debug/deps/zk_kyc.d: contracts/zk_kyc/src/lib.rs contracts/zk_kyc/src/nullifier.rs
 
-C:\Users\dell\Grant-Stream-Contracts\target\debug\deps\zk_kyc.dll: contracts\zk_kyc\src\lib.rs
+/root/repos/AgriTrust-Contracts/target/debug/deps/libzk_kyc.so: contracts/zk_kyc/src/lib.rs contracts/zk_kyc/src/nullifier.rs
 
-C:\Users\dell\Grant-Stream-Contracts\target\debug\deps\libzk_kyc.rlib: contracts\zk_kyc\src\lib.rs
+/root/repos/AgriTrust-Contracts/target/debug/deps/libzk_kyc.rlib: contracts/zk_kyc/src/lib.rs contracts/zk_kyc/src/nullifier.rs
 
-contracts\zk_kyc\src\lib.rs:
+contracts/zk_kyc/src/lib.rs:
+contracts/zk_kyc/src/nullifier.rs:
