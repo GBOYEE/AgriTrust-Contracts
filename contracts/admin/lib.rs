@@ -67,3 +67,20 @@ impl AdminContract {
         }
     }
 }
+
+/// Check depth before cross-contract calls to prevent AuthContextOutOfBounds.
+/// Returns true if the call chain is within safe limits.
+pub fn check_depth_before_dispatch(env: &Env) -> bool {
+    let depth = crate::admin::src::lib::get_admin_chain_depth(env);
+    if depth >= crate::admin::src::lib::MAX_ADMIN_CHAIN_DEPTH {
+        // Depth too high — defer to two-phase pattern
+        env.events().publish(
+            (soroban_sdk::symbol_short!("depth_defer"),),
+            (depth, env.ledger().sequence()),
+        );
+        return false;
+    }
+    // Safe — increment and proceed
+    let _ = crate::admin::src::lib::increment_admin_chain_depth(env);
+    true
+}
