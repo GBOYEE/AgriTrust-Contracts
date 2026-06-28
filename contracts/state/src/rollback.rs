@@ -36,13 +36,14 @@ pub fn rollback_mutation(
 
     // Restore previous values
     for key in mutation.prev_values.keys() {
-        let prev_value: Bytes = mutation.prev_values.get(key).unwrap();
+        let k = key.clone();
+        let prev_value: Bytes = mutation.prev_values.get(k.clone()).unwrap();
         if prev_value.is_empty() {
-            env.storage().persistent().remove(&StateKey::StateValue(key.clone()));
+            env.storage().persistent().remove(&StateKey::StateValue(k));
         } else {
             env.storage()
                 .persistent()
-                .set(&StateKey::StateValue(key.clone()), &prev_value);
+                .set(&StateKey::StateValue(k), &prev_value);
         }
     }
 
@@ -78,13 +79,14 @@ pub fn rollback_mutation(
 /// Apply a compensation entry to state (revert to previous values)
 pub fn apply_compensation(env: &Env, compensation: &CompensationEntry) {
     for key in compensation.compensation_state.keys() {
-        let value: Bytes = compensation.compensation_state.get(key).unwrap();
+        let k = key.clone();
+        let value: Bytes = compensation.compensation_state.get(k.clone()).unwrap();
         if value.is_empty() {
-            env.storage().persistent().remove(&StateKey::StateValue(key.clone()));
+            env.storage().persistent().remove(&StateKey::StateValue(k));
         } else {
             env.storage()
                 .persistent()
-                .set(&StateKey::StateValue(key.clone()), &value);
+                .set(&StateKey::StateValue(k), &value);
         }
     }
 }
@@ -100,7 +102,6 @@ pub fn verify_compensation_integrity(
         .get(&StateKey::CompensationMap(mutation_id.clone()))
         .unwrap_or(Vec::new(&env));
 
-    // Verify that compensation state keys are non-empty
     for comp in comp_list.iter() {
         if comp.compensation_state.is_empty() {
             return false;
