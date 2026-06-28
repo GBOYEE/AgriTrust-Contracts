@@ -208,7 +208,7 @@ impl OptimisticContract {
             let compensation = CompensationEntry {
                 original_mutation_id: mutation_id.clone(),
                 compensation_state: mutation.prev_values.clone(),
-                reason: symbol_short!("out_of_order"),
+                reason: symbol_short!("ooo_comp"),
                 timestamp: env.ledger().sequence(),
             };
 
@@ -229,7 +229,7 @@ impl OptimisticContract {
                 .set(&StateKey::PendingMap(batch_id.clone()), &pending_list);
 
             env.events().publish(
-                (symbol_short!("compensated"), batch_id, mutation_id),
+                (symbol_short!("compense"), batch_id, mutation_id),
                 version.current_seq_no,
             );
             return false;
@@ -324,7 +324,7 @@ impl OptimisticContract {
         let compensation = CompensationEntry {
             original_mutation_id: mutation_id.clone(),
             compensation_state: mutation.prev_values,
-            reason: symbol_short!("explicit_rb"),
+            reason: symbol_short!("explicit"),
             timestamp: env.ledger().sequence(),
         };
 
@@ -346,7 +346,7 @@ impl OptimisticContract {
             .set(&StateKey::PendingMap(batch_id.clone()), &pending_list);
 
         env.events().publish(
-            (symbol_short!("rolled_back"), batch_id, mutation_id),
+            (symbol_short!("rolledbk"), batch_id, mutation_id),
             env.ledger().sequence(),
         );
     }
