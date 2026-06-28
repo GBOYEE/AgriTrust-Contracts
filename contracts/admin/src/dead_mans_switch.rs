@@ -50,8 +50,10 @@ impl DeadMansSwitchModule {
         recovery_vault
     }
 
-    pub fn get_primary_admin(env: &Env) -> Address {
-        env.storage().instance().get(&SwitchKey::PrimaryAdmin).unwrap_or_default()
+    pub fn get_primary_admin(env: &Env) -> Option<Address> {
+        env.storage()
+            .instance()
+            .get(&SwitchKey::PrimaryAdmin)
     }
 
     pub fn set_recovery_vault(env: &Env, new_vault: Address) {

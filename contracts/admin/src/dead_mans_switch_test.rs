@@ -23,7 +23,7 @@ mod tests {
         }
 
         pub fn get_primary_admin(env: Env) -> Address {
-            DeadMansSwitchModule::get_primary_admin(&env)
+            DeadMansSwitchModule::get_primary_admin(&env).unwrap()
         }
 
         pub fn set_recovery_vault(env: Env, new_vault: Address) {
