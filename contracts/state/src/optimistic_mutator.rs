@@ -31,6 +31,7 @@ pub enum StateKey {
 // ─── Data Types ────────────────────────────────────────────────────────────
 
 #[contracttype]
+#[derive(Clone, Copy)]
 pub struct StateVersion {
     pub current_version: u64,
     pub current_seq_no: u64,
@@ -250,10 +251,11 @@ impl OptimisticContract {
 
         // ── Phase 2: Apply state changes ──
         for key in mutation.state_updates.keys() {
-            let new_value: Bytes = mutation.state_updates.get(key).unwrap();
+            let k = key.clone();
+            let new_value: Bytes = mutation.state_updates.get(k.clone()).unwrap();
             env.storage()
                 .persistent()
-                .set(&StateKey::StateValue(key.clone()), &new_value);
+                .set(&StateKey::StateValue(k), &new_value);
         }
 
         // Increment version and seq_no
@@ -313,20 +315,21 @@ impl OptimisticContract {
 
         // Restore previous values (compensating action)
         for key in mutation.prev_values.keys() {
-            let prev_value: Bytes = mutation.prev_values.get(key).unwrap();
+            let k = key.clone();
+            let prev_value: Bytes = mutation.prev_values.get(k.clone()).unwrap();
             if prev_value.is_empty() {
-                env.storage().persistent().remove(&StateKey::StateValue(key.clone()));
+                env.storage().persistent().remove(&StateKey::StateValue(k));
             } else {
                 env.storage()
                     .persistent()
-                    .set(&StateKey::StateValue(key.clone()), &prev_value);
+                    .set(&StateKey::StateValue(k), &prev_value);
             }
         }
 
         // Log compensation
         let compensation = CompensationEntry {
             original_mutation_id: mutation_id.clone(),
-            compensation_state: mutation.prev_values,
+            compensation_state: mutation.prev_values.clone(),
             reason: symbol_short!("explicit"),
             timestamp: env.ledger().sequence(),
         };
@@ -434,7 +437,6 @@ impl OptimisticContract {
 
     /// Generate mutation_id from batch_id and seq_no
     fn make_mutation_id(env: &Env, batch_id: &Bytes, seq_no: u64) -> Bytes {
-        use soroban_sdk::IntoVal;
         let mut data = Bytes::new(env);
         for i in 0..batch_id.len() {
             data.push_back(batch_id.get(i).unwrap());
