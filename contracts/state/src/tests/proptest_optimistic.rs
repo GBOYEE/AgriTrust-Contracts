@@ -53,10 +53,12 @@ mod proptest_optimistic {
     }
 
     fn make_key_for_account(env: &Env, idx: usize) -> Bytes {
-        let mut data = Vec::new(env);
-        data.extend_from_slice(b"acct_");
-        data.push(idx as u8);
-        Bytes::from_slice(env, data.as_slice())
+        let mut data = Bytes::new(env);
+        for b in b"acct_" {
+            data.push_back(*b);
+        }
+        data.push_back(idx as u8);
+        data
     }
 
     fn make_value_i64(env: &Env, val: i64) -> Bytes {

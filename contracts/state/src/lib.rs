@@ -17,8 +17,8 @@ mod optimistic_mutator;
 mod rollback;
 
 pub use optimistic_mutator::{
-    begin_optimistic, commit_optimistic, expire_pending,
-    CompensationEntry, MutationStatus, PendingMutation, StateVersion,
+    CompensationEntry, MutationStatus,
+    PendingMutation, StateKey, StateVersion,
     OptimisticContract, OPTIMISTIC_LOCK_TIMEOUT, MAX_CONCURRENT_MUTATIONS,
 };
 pub use rollback::{apply_compensation, rollback_mutation, verify_compensation_integrity};

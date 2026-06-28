@@ -6,8 +6,9 @@
 
 use soroban_sdk::{contracttype, symbol_short, Bytes, Env, Map, Symbol, Vec};
 
+use crate::optimistic_mutator::StateKey;
 use crate::{
-    CompensationEntry, MutationStatus, PendingMutation, StateKey,
+    CompensationEntry, MutationStatus, PendingMutation,
 };
 
 /// Rollback a mutation and create a compensating entry

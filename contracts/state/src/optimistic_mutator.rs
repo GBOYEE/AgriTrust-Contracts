@@ -37,6 +37,7 @@ pub struct StateVersion {
 }
 
 #[contracttype]
+#[derive(Clone)]
 pub struct PendingMutation {
     pub batch_id: Bytes,
     pub mutation_id: Bytes,
@@ -44,11 +45,12 @@ pub struct PendingMutation {
     pub prev_values: Map<Bytes, Bytes>,   // key -> old value (for compensation)
     pub version: u64,
     pub seq_no: u64,
-    pub expires_at: u64,
+    pub expires_at: u32,
     pub status: MutationStatus,
 }
 
 #[contracttype]
+#[derive(Clone, PartialEq)]
 pub enum MutationStatus {
     Pending,
     ReadyToCommit,
@@ -58,11 +60,12 @@ pub enum MutationStatus {
 }
 
 #[contracttype]
+#[derive(Clone)]
 pub struct CompensationEntry {
     pub original_mutation_id: Bytes,
     pub compensation_state: Map<Bytes, Bytes>,  // reverted values
     pub reason: Symbol,
-    pub timestamp: u64,
+    pub timestamp: u32,
 }
 
 // ─── Core Module ──────────────────────────────────────────────────────────
@@ -431,9 +434,15 @@ impl OptimisticContract {
 
     /// Generate mutation_id from batch_id and seq_no
     fn make_mutation_id(env: &Env, batch_id: &Bytes, seq_no: u64) -> Bytes {
-        let mut data: Vec<u8> = Vec::new(env);
-        data.extend_from_slice(batch_id);
-        data.extend_from_slice(&seq_no.to_be_bytes());
-        Bytes::from_slice(env, data.as_slice())
+        use soroban_sdk::IntoVal;
+        let mut data = Bytes::new(env);
+        for i in 0..batch_id.len() {
+            data.push_back(batch_id.get(i).unwrap());
+        }
+        let seq_bytes = seq_no.to_be_bytes();
+        for &b in &seq_bytes {
+            data.push_back(b);
+        }
+        data
     }
 }

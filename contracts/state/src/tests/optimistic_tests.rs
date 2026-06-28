@@ -221,9 +221,14 @@ mod tests {
 
     // Helper to generate mutation_id (mirrors contract logic)
     fn make_mutation_id(env: &Env, batch_id: &Bytes, seq_no: u64) -> Bytes {
-        let mut data: Vec<u8> = Vec::new(env);
-        data.extend_from_slice(batch_id);
-        data.extend_from_slice(&seq_no.to_be_bytes());
-        Bytes::from_slice(env, data.as_slice())
+        let mut data = Bytes::new(env);
+        for i in 0..batch_id.len() {
+            data.push_back(batch_id.get(i).unwrap());
+        }
+        let seq_bytes = seq_no.to_be_bytes();
+        for &b in &seq_bytes {
+            data.push_back(b);
+        }
+        data
     }
 }
