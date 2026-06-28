@@ -20,7 +20,7 @@ pub const MAX_CONCURRENT_MUTATIONS: u32 = 5;
 
 #[contracttype]
 pub enum StateKey {
-    Version(StateVersion),
+    Version,
     PendingMap(Bytes),           // batch_id -> Vec<PendingMutation>
     CompensationMap(Bytes),    // mutation_id -> Vec<CompensationEntry>
     BatchCounter(Bytes),         // batch_id -> next_seq_no
@@ -82,7 +82,7 @@ impl OptimisticContract {
             current_version: 0,
             current_seq_no: 0,
         };
-        env.storage().persistent().set(&StateKey::Version(version), &version);
+        env.storage().persistent().set(&StateKey::Version, &version);
     }
 
     /// Begin an optimistic mutation. Returns the assigned seq_no.
@@ -108,8 +108,8 @@ impl OptimisticContract {
         let version: StateVersion = env
             .storage()
             .persistent()
-            .get(&StateKey::Version(StateVersion { current_version: 0, current_seq_no: 0 }))
-            .unwrap();
+            .get(&StateKey::Version)
+            .unwrap_or(StateVersion { current_version: 0, current_seq_no: 0 });
 
         // Capture previous values for compensation
         let mut prev_values: Map<Bytes, Bytes> = Map::new(&env);
@@ -167,7 +167,7 @@ impl OptimisticContract {
         let mut version: StateVersion = env
             .storage()
             .persistent()
-            .get(&StateKey::Version(StateVersion { current_version: 0, current_seq_no: 0 }))
+            .get(&StateKey::Version)
             .unwrap();
 
         // Find the pending mutation
@@ -263,7 +263,7 @@ impl OptimisticContract {
         version.current_seq_no = mutation.seq_no;
         env.storage()
             .persistent()
-            .set(&StateKey::Version(version), &version);
+            .set(&StateKey::Version, &version);
 
         // Mark committed
         let committed_list: Vec<PendingMutation> = env
@@ -407,7 +407,7 @@ impl OptimisticContract {
     pub fn get_version(env: Env) -> StateVersion {
         env.storage()
             .persistent()
-            .get(&StateKey::Version(StateVersion { current_version: 0, current_seq_no: 0 }))
+            .get(&StateKey::Version)
             .unwrap()
     }
 
