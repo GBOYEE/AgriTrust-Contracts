@@ -7,10 +7,10 @@
 
 #[cfg(test)]
 mod proptest_optimistic {
-    use super::*;
+    use crate::*;
     use soroban_sdk::{
         testutils::Ledger,
-        Bytes, Env, Map,
+        Bytes, Env, Map, Vec,
     };
     use crate::{MutationStatus, OPTIMISTIC_LOCK_TIMEOUT};
 
@@ -67,7 +67,9 @@ mod proptest_optimistic {
 
     fn read_value_i64(val: &Bytes) -> i64 {
         let mut bytes = [0u8; 8];
-        bytes.copy_from_slice(&val.raw_slice()[..8]);
+        for i in 0..8 {
+            bytes[i] = val.get(i).unwrap();
+        }
         i64::from_be_bytes(bytes)
     }
 
