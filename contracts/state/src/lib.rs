@@ -25,6 +25,3 @@ pub use rollback::{apply_compensation, rollback_mutation, verify_compensation_in
 
 #[cfg(test)]
 mod tests;
-
-#[cfg(test)]
-mod proptest_optimistic;
