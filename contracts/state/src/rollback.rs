@@ -20,7 +20,7 @@ pub fn rollback_mutation(
         .storage()
         .persistent()
         .get(&StateKey::PendingMap(batch_id.clone()))
-        .unwrap_or(Vec::new(env));
+        .unwrap_or(Vec::new(&env));
 
     let mut found_idx: Option<u32> = None;
     for (i, pending) in pending_list.iter().enumerate() {
@@ -45,7 +45,8 @@ pub fn rollback_mutation(
         }
     }
 
-    // Create compensation entry let compensation = CompensationEntry {
+    // Create compensation entry
+    let compensation = CompensationEntry {
         original_mutation_id: mutation_id.clone(),
         compensation_state: mutation.prev_values.clone(),
         reason: symbol_short!("rb_module"),
@@ -57,7 +58,7 @@ pub fn rollback_mutation(
         .storage()
         .persistent()
         .get(&StateKey::CompensationMap(mutation_id.clone()))
-        .unwrap_or(Vec::new(env));
+        .unwrap_or(Vec::new(&env));
     comp_list.push_back(compensation.clone());
     env.storage()
         .persistent()
@@ -96,7 +97,7 @@ pub fn verify_compensation_integrity(
         .storage()
         .persistent()
         .get(&StateKey::CompensationMap(mutation_id.clone()))
-        .unwrap_or(Vec::new(env));
+        .unwrap_or(Vec::new(&env));
 
     // Verify that compensation state keys are non-empty
     for comp in comp_list.iter() {
