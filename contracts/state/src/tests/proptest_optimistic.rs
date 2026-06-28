@@ -56,8 +56,8 @@ mod proptest_optimistic {
         // Final value should be NUM_ROUNDS * 10
         let stored = OptimisticContract::get_state_value(env.clone(), key);
         let mut bytes = [0u8; 8];
-        for j in 0..8 {
-            bytes[j] = stored.get(j).unwrap();
+        for j in 0..8_u32 {
+            bytes[j as usize] = stored.get(j).unwrap();
         }
         assert_eq!(
             i64::from_be_bytes(bytes),
@@ -95,8 +95,8 @@ mod proptest_optimistic {
         // Value should be restored to 42
         let stored = OptimisticContract::get_state_value(env.clone(), key);
         let mut bytes = [0u8; 8];
-        for j in 0..8 {
-            bytes[j] = stored.get(j).unwrap();
+        for j in 0..8_u32 {
+            bytes[j as usize] = stored.get(j).unwrap();
         }
         assert_eq!(
             i64::from_be_bytes(bytes),

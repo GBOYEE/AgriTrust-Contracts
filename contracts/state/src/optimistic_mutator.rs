@@ -51,7 +51,7 @@ pub struct PendingMutation {
 }
 
 #[contracttype]
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum MutationStatus {
     Pending,
     ReadyToCommit,
