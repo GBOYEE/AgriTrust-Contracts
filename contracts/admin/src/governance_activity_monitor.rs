@@ -10,7 +10,7 @@
 //! for significant parameter modifications.
 
 use crate::depth_tracker;
-use soroban_sdk::{contract, contractimpl, contracttype, contracterror, symbol_short, Address, Env, Vec, String};
+use soroban_sdk::{ contracttype, contracterror, symbol_short, Address, Env, Vec, String};
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -140,11 +140,9 @@ pub enum MonitorError {
 
 // ── Contract Implementation ───────────────────────────────────────────────────
 
-#[contract]
-pub struct GovernanceActivityMonitor;
+pub struct GovernanceActivityMonitorModule;
 
-#[contractimpl]
-impl GovernanceActivityMonitor {
+impl GovernanceActivityMonitorModule {
     /// Initialize the monitor with an admin address
     pub fn initialize(env: Env, admin: Address) -> Result<(), MonitorError> {
         if env.storage().instance().has(&MonitorKey::Admin) {
@@ -388,7 +386,7 @@ impl GovernanceActivityMonitor {
     }
 
     /// Bootstrap the new admin's heartbeat
-    pub fn record_activity(env: Env, admin: Address) {
+    pub fn record_activity(env: &Env, admin: Address) {
         admin.require_auth();
         let current_ledger = env.ledger().sequence();
         

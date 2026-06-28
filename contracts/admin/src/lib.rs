@@ -15,13 +15,13 @@ pub mod depth_tracker;
 pub mod governance_activity_monitor;
 
 // Re-export main types for easier integration
-pub use dead_mans_switch::DeadMansSwitchContract;
+pub use dead_mans_switch::DeadMansSwitchModule;
 pub use depth_tracker::{
     flush_depth, get_current_depth, get_max_depth, initialize_depth_tracking,
     is_approaching_limit, is_depth_tracking_enabled, pop_depth, push_depth,
     set_max_depth, DepthError, DepthKey, DEFAULT_MAX_ADMIN_CHAIN_DEPTH,
 };
-pub use governance_activity_monitor::GovernanceActivityMonitor;
+pub use governance_activity_monitor::GovernanceActivityMonitorModule;
 pub use governance_activity_monitor::{ParameterType, ChangeStatus, MonitorError};
 
 use soroban_sdk::{contract, contractimpl, contracttype, Address, Env, symbol_short};
@@ -30,7 +30,6 @@ use soroban_sdk::{contract, contractimpl, contracttype, Address, Env, symbol_sho
 pub enum AdminKey {
     ActiveAdmin,
     PendingAdmin,
-    MonitorContract,
 }
 
 #[contract]
@@ -38,9 +37,8 @@ pub struct AdminContract;
 
 #[contractimpl]
 impl AdminContract {
-    pub fn initialize(env: Env, initial_admin: Address, monitor_contract: Address) {
+    pub fn initialize(env: Env, initial_admin: Address) {
         env.storage().instance().set(&AdminKey::ActiveAdmin, &initial_admin);
-        env.storage().instance().set(&AdminKey::MonitorContract, &monitor_contract);
         depth_tracker::initialize_depth_tracking(&env);
     }
 
@@ -77,15 +75,12 @@ impl AdminContract {
             (old_admin, pending_admin.clone(), current_ledger),
         );
 
-        // Cross-contract call with depth check
-        if let Some(monitor_contract) = env.storage().instance().get::<_, Address>(&AdminKey::MonitorContract) {
-            if depth_tracker::is_approaching_limit(&env) {
-                depth_tracker::flush_depth(&env);
-            }
-
-            let monitor_client = governance_activity_monitor::GovernanceActivityMonitorClient::new(&env, &monitor_contract);
-            monitor_client.record_activity(&pending_admin);
+        // Direct module call with depth check
+        if depth_tracker::is_approaching_limit(&env) {
+            depth_tracker::flush_depth(&env);
         }
+
+        governance_activity_monitor::GovernanceActivityMonitorModule::record_activity(&env, pending_admin);
 
         depth_tracker::flush_depth(&env);
     }
