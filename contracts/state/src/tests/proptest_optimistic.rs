@@ -53,7 +53,7 @@ mod proptest_optimistic {
             assert!(committed, "Commit {} should succeed", i);
         }
 
-        // Final value should be NUM_ROUNDS * 10 (last write wins)
+        // Final value should be 10 (last write wins, all writes are 10)
         let stored = client.get_state_value(&key);
         let mut bytes = [0u8; 8];
         for j in 0..8_u32 {
@@ -61,9 +61,8 @@ mod proptest_optimistic {
         }
         assert_eq!(
             i64::from_be_bytes(bytes),
-            (NUM_ROUNDS as i64) * 10,
-            "Final value should be {}",
-            (NUM_ROUNDS as i64) * 10
+            10,
+            "Final value should be 10 (last write wins)"
         );
     }
 
