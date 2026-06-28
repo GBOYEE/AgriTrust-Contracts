@@ -9,14 +9,12 @@ mod tests {
         Bytes, Env, Map,
     };
 
-    fn setup() -> (Env, OptimisticContractClient, Bytes) {
-        let env = Env::default();
-        env.mock_all_auths();
+    fn setup(env: &Env) -> (OptimisticContractClient, Bytes) {
         let contract_id = env.register(OptimisticContract, ());
-        let client = OptimisticContractClient::new(&env, &contract_id);
+        let client = OptimisticContractClient::new(env, &contract_id);
         client.initialize();
-        let batch_id = Bytes::from_slice(&env, b"test_batch");
-        (env, client, batch_id)
+        let batch_id = Bytes::from_slice(env, b"test_batch");
+        (client, batch_id)
     }
 
     fn make_key(env: &Env, name: &[u8]) -> Bytes {
@@ -41,7 +39,9 @@ mod tests {
 
     #[test]
     fn test_initialize() {
-        let (env, client, _) = setup();
+        let env = Env::default();
+        env.mock_all_auths();
+        let (client, _) = setup(&env);
         let version = client.get_version();
         assert_eq!(version.current_version, 0);
         assert_eq!(version.current_seq_no, 0);
@@ -49,7 +49,9 @@ mod tests {
 
     #[test]
     fn test_begin_assigns_seq_no() {
-        let (env, client, batch_id) = setup();
+        let env = Env::default();
+        env.mock_all_auths();
+        let (client, batch_id) = setup(&env);
 
         let seq1 = client.begin_optimistic(&batch_id, &Map::new(&env));
         assert_eq!(seq1, 1);
@@ -60,7 +62,9 @@ mod tests {
 
     #[test]
     fn test_commit_in_order() {
-        let (env, client, batch_id) = setup();
+        let env = Env::default();
+        env.mock_all_auths();
+        let (client, batch_id) = setup(&env);
         let key = make_key(&env, b"balance");
         let val1 = make_value(&env, 100);
         let val2 = make_value(&env, 200);
@@ -98,7 +102,9 @@ mod tests {
 
     #[test]
     fn test_commit_out_of_order_compensates() {
-        let (env, client, batch_id) = setup();
+        let env = Env::default();
+        env.mock_all_auths();
+        let (client, batch_id) = setup(&env);
         let key = make_key(&env, b"balance");
         let val1 = make_value(&env, 100);
         let val2 = make_value(&env, 200);
@@ -132,7 +138,9 @@ mod tests {
 
     #[test]
     fn test_rollback_restores_state() {
-        let (env, client, batch_id) = setup();
+        let env = Env::default();
+        env.mock_all_auths();
+        let (client, batch_id) = setup(&env);
         let key = make_key(&env, b"balance");
         let initial_val = make_value(&env, 50);
 
@@ -153,14 +161,16 @@ mod tests {
         let id = make_mutation_id(&env, &batch_id, seq);
         client.rollback_mutation(&batch_id, &id);
 
-        // Verify state restored  
+        // Verify state restored
         let stored = client.get_state_value(&key);
         assert_eq!(stored, initial_val);
     }
 
     #[test]
     fn test_expire_before_timeout_fails() {
-        let (env, client, batch_id) = setup();
+        let env = Env::default();
+        env.mock_all_auths();
+        let (client, batch_id) = setup(&env);
         let key = make_key(&env, b"balance");
         let val = make_value(&env, 100);
 
@@ -176,7 +186,9 @@ mod tests {
 
     #[test]
     fn test_version_linearization() {
-        let (env, client, batch_id) = setup();
+        let env = Env::default();
+        env.mock_all_auths();
+        let (client, batch_id) = setup(&env);
         let key = make_key(&env, b"counter");
 
         // Submit 5 sequential mutations

@@ -10,13 +10,11 @@ mod proptest_optimistic {
         Bytes, Env, Map,
     };
 
-    fn setup() -> (Env, OptimisticContractClient) {
-        let env = Env::default();
-        env.mock_all_auths();
+    fn setup(env: &Env) -> OptimisticContractClient {
         let contract_id = env.register(OptimisticContract, ());
-        let client = OptimisticContractClient::new(&env, &contract_id);
+        let client = OptimisticContractClient::new(env, &contract_id);
         client.initialize();
-        (env, client)
+        client
     }
 
     fn make_mutation_id(env: &Env, batch_id: &Bytes, seq_no: u64) -> Bytes {
@@ -36,7 +34,9 @@ mod proptest_optimistic {
     /// Test sequential commits accumulate correctly
     #[test]
     fn test_sequential_accumulation() {
-        let (env, client) = setup();
+        let env = Env::default();
+        env.mock_all_auths();
+        let client = setup(&env);
 
         let batch_id = Bytes::from_slice(&env, b"seq_batch");
         let key = Bytes::from_slice(&env, b"counter");
@@ -70,7 +70,9 @@ mod proptest_optimistic {
     /// Test that rollback restores state
     #[test]
     fn test_rollback_creates_compensation() {
-        let (env, client) = setup();
+        let env = Env::default();
+        env.mock_all_auths();
+        let client = setup(&env);
 
         let batch_id = Bytes::from_slice(&env, b"rb_batch");
         let key = Bytes::from_slice(&env, b"val");
@@ -105,7 +107,9 @@ mod proptest_optimistic {
     /// Test version tracking
     #[test]
     fn test_version_tracking() {
-        let (env, client) = setup();
+        let env = Env::default();
+        env.mock_all_auths();
+        let client = setup(&env);
 
         let v0 = client.get_version();
         assert_eq!(v0.current_version, 0, "Initial version should be 0");
